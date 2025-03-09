@@ -1,9 +1,7 @@
 // Main Dart plugin class for the RAR plugin
 // lib/rar.dart
 import 'dart:async';
-import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class Rar {
@@ -29,7 +27,7 @@ class Rar {
           'password': password,
         },
       );
-      
+
       return {
         'success': result?['success'] ?? false,
         'message': result?['message'] ?? 'Unknown error',
@@ -70,7 +68,7 @@ class Rar {
           'compressionLevel': compressionLevel,
         },
       );
-      
+
       return {
         'success': result?['success'] ?? false,
         'message': result?['message'] ?? 'Unknown error',
@@ -105,7 +103,7 @@ class Rar {
           'password': password,
         },
       );
-      
+
       return {
         'success': result?['success'] ?? false,
         'message': result?['message'] ?? 'Unknown error',

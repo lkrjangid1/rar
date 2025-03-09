@@ -13,7 +13,7 @@ void main() {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -83,7 +83,7 @@ class _MyAppState extends State<MyApp> {
       }
 
       final extractPath = '${directory.path}/extracted';
-      
+
       // Create the directory if it doesn't exist
       final extractDir = Directory(extractPath);
       if (!await extractDir.exists()) {
@@ -109,9 +109,7 @@ class _MyAppState extends State<MyApp> {
         final dir = Directory(extractPath);
         final List<FileSystemEntity> entities = await dir.list().toList();
         setState(() {
-          _fileList = entities
-              .map((e) => e.path.split('/').last)
-              .toList();
+          _fileList = entities.map((e) => e.path.split('/').last).toList();
         });
       } else {
         setState(() {
