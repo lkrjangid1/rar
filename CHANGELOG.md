@@ -1,3 +1,6 @@
-## 0.0.1
+## 0.1.0
 
-* TODO: Describe initial release.
+Initial release with:
+
+* Unrar and rar files in android both
+* Unrar files in IOS only
