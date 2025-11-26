@@ -4,14 +4,15 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'rar'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter plugin project.'
+  s.version          = '0.2.1'
+  s.summary          = 'Flutter plugin for handling RAR files on iOS.'
   s.description      = <<-DESC
-A new Flutter plugin project.
+A Flutter plugin for extracting and listing RAR archive contents on iOS.
+Uses UnrarKit for RAR format support.
                        DESC
-  s.homepage         = 'https://github.com/lkrjangid1/'
+  s.homepage         = 'https://github.com/lkrjangid1/rar'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'lkrjangid@gmail.com' }
+  s.author           = { 'Lokesh Jangid' => 'lkrjangid@gmail.com' }
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'

@@ -1,16 +1,21 @@
+// linux/rar_plugin.cc
+//
+// Flutter plugin registration for Linux.
+// Note: The actual RAR operations are handled via FFI (rar_desktop_ffi.dart),
+// not through MethodChannel. This plugin file is required by Flutter's plugin
+// system for registration purposes.
+
 #include "include/rar/rar_plugin.h"
 
 #include <flutter_linux/flutter_linux.h>
 #include <gtk/gtk.h>
-#include <sys/utsname.h>
 
 #include <cstring>
 
 #include "rar_plugin_private.h"
 
 #define RAR_PLUGIN(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), rar_plugin_get_type(), \
-                              RarPlugin))
+  (G_TYPE_CHECK_INSTANCE_CAST((obj), rar_plugin_get_type(), RarPlugin))
 
 struct _RarPlugin {
   GObject parent_instance;
@@ -19,11 +24,11 @@ struct _RarPlugin {
 G_DEFINE_TYPE(RarPlugin, rar_plugin, g_object_get_type())
 
 // Called when a method call is received from Flutter.
+// Note: Desktop RAR operations use FFI directly, so this is minimal.
 static void rar_plugin_handle_method_call(
     RarPlugin* self,
     FlMethodCall* method_call) {
   g_autoptr(FlMethodResponse) response = nullptr;
-
   const gchar* method = fl_method_call_get_name(method_call);
 
   if (strcmp(method, "getPlatformVersion") == 0) {
@@ -36,9 +41,7 @@ static void rar_plugin_handle_method_call(
 }
 
 FlMethodResponse* get_platform_version() {
-  struct utsname uname_data = {};
-  uname(&uname_data);
-  g_autofree gchar *version = g_strdup_printf("Linux %s", uname_data.version);
+  g_autofree gchar* version = g_strdup_printf("Linux (Desktop FFI)");
   g_autoptr(FlValue) result = fl_value_new_string(version);
   return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
 }
@@ -66,7 +69,7 @@ void rar_plugin_register_with_registrar(FlPluginRegistrar* registrar) {
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   g_autoptr(FlMethodChannel) channel =
       fl_method_channel_new(fl_plugin_registrar_get_messenger(registrar),
-                            "rar",
+                            "com.lkrjangid.rar",
                             FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(channel, method_call_cb,
                                             g_object_ref(plugin),

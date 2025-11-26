@@ -1,9 +1,13 @@
+// windows/rar_plugin.cpp
+//
+// Flutter plugin registration for Windows.
+// Note: The actual RAR operations are handled via FFI (rar_desktop_ffi.dart),
+// not through MethodChannel. This plugin file is required by Flutter's plugin
+// system for registration purposes.
+
 #include "rar_plugin.h"
 
-// This must be included before many other Windows headers.
 #include <windows.h>
-
-// For getPlatformVersion; remove unless needed for your plugin implementation.
 #include <VersionHelpers.h>
 
 #include <flutter/method_channel.h>
@@ -20,7 +24,7 @@ void RarPlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows *registrar) {
   auto channel =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          registrar->messenger(), "rar",
+          registrar->messenger(), "com.lkrjangid.rar",
           &flutter::StandardMethodCodec::GetInstance());
 
   auto plugin = std::make_unique<RarPlugin>();
@@ -42,7 +46,7 @@ void RarPlugin::HandleMethodCall(
     std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
   if (method_call.method_name().compare("getPlatformVersion") == 0) {
     std::ostringstream version_stream;
-    version_stream << "Windows ";
+    version_stream << "Windows (Desktop FFI) ";
     if (IsWindows10OrGreater()) {
       version_stream << "10+";
     } else if (IsWindows8OrGreater()) {

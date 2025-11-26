@@ -1,7 +1,11 @@
 name: rar
-description: A Flutter plugin for handling RAR files. Extract and list contents of RAR archives on both Android and iOS.
-version: 0.1.0
+description: >
+  A Flutter plugin for handling RAR files. Extract and list contents of RAR archives
+  on Android, iOS, Linux, macOS, Windows, and Web platforms.
+version: 0.2.1
 homepage: https://github.com/lkrjangid1/rar
+repository: https://github.com/lkrjangid1/rar
+issue_tracker: https://github.com/lkrjangid1/rar/issues
 
 environment:
   sdk: '>=3.4.4 <4.0.0'
@@ -10,23 +14,38 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Platform interface for federated plugin architecture
+  plugin_platform_interface: ^2.1.0
+  # FFI support for desktop platforms
+  ffi: ^2.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^3.0.0
+  # For regenerating FFI bindings if needed (optional)
+  ffigen: ^16.0.0
 
 flutter:
   plugin:
     platforms:
+      # Mobile platforms use MethodChannel with native libraries
       android:
         package: com.lkrjangid.rar
         pluginClass: RarPlugin
       ios:
         pluginClass: RarPlugin
-      # linux:
-      #   pluginClass: RarPlugin
-      # macos:
-      #   pluginClass: RarPlugin
-      # windows:
-      #   pluginClass: RarPluginCApi
+      # Desktop platforms use FFI with native libarchive wrapper
+      linux:
+        pluginClass: RarPlugin
+        dartPluginClass: RarLinux
+      macos:
+        pluginClass: RarPlugin
+        dartPluginClass: RarMacOS
+      windows:
+        pluginClass: RarPluginCApi
+        dartPluginClass: RarWindows
+      # Web platform uses JS interop with WASM library
+      web:
+        pluginClass: RarWeb
+        fileName: src/rar_web.dart
