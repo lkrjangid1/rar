@@ -3,8 +3,7 @@
 // Main Dart plugin class for the RAR plugin.
 // Provides a unified API for handling RAR files across all platforms:
 // - Android (via JUnRar)
-// - iOS (via UnrarKit)
-// - Linux/macOS/Windows (via native FFI with UnRAR library)
+// - iOS/macOS (via UnrarKit)
 // - Web (via WebAssembly with libarchive.js)
 
 import 'rar_platform_interface.dart';
@@ -64,8 +63,7 @@ class Rar {
   ///
   /// Platform support:
   /// - Android: Full support via JUnRar (RAR v4/v5, passwords)
-  /// - iOS: Full support via UnrarKit (RAR v4/v5, passwords)
-  /// - Linux/macOS/Windows: Full support via native UnRAR library
+  /// - iOS/macOS: Full support via UnrarKit (RAR v4/v5, passwords)
   /// - Web: Support via WebAssembly (with some limitations on file system access)
   static Future<Map<String, dynamic>> extractRarFile({
     required String rarFilePath,
@@ -119,8 +117,7 @@ class Rar {
   ///
   /// Platform support:
   /// - Android: Full support via JUnRar
-  /// - iOS: Full support via UnrarKit
-  /// - Linux/macOS/Windows: Full support via native UnRAR library
+  /// - iOS/macOS: Full support via UnrarKit
   /// - Web: Support via WebAssembly
   static Future<Map<String, dynamic>> listRarContents({
     required String rarFilePath,

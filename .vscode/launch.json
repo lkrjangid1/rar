@@ -32,22 +32,6 @@
             "deviceId": "macos",
             "program": "lib/main.dart",
             "cwd": "example"
-        },
-        {
-            "name": "example (linux)",
-            "request": "launch",
-            "type": "dart",
-            "deviceId": "linux",
-            "program": "lib/main.dart",
-            "cwd": "example"
-        },
-        {
-            "name": "example (windows)",
-            "request": "launch",
-            "type": "dart",
-            "deviceId": "windows",
-            "program": "lib/main.dart",
-            "cwd": "example"
         }
     ]
 }
