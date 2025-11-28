@@ -52,6 +52,17 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initPlatform();
+    _testListRarContents();
+  }
+
+  Future<void> _testListRarContents() async {
+    // This is for testing purposes only
+    try {
+      await Rar.listRarContents(rarFilePath: 'test.rar');
+    } catch (e) {
+      // ignore: avoid_print
+      print('Test error: $e');
+    }
   }
 
   Future<void> _initPlatform() async {
