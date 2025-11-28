@@ -18,6 +18,11 @@
 (function() {
   'use strict';
 
+  const LOG_PREFIX = '[RAR Web]';
+  const debug = (...args) => console.info(LOG_PREFIX, ...args);
+  const warn = (...args) => console.warn(LOG_PREFIX, ...args);
+  const err = (...args) => console.error(LOG_PREFIX, ...args);
+
   // WASM module state
   let wasmModule = null;
   let isInitialized = false;
@@ -33,6 +38,7 @@
     // Must be called before any other operations
     async init() {
       if (isInitialized) {
+        debug('Init skipped - already initialized');
         return true;
       }
 
@@ -41,10 +47,10 @@
         // We use a CDN-hosted version or local file depending on configuration
         wasmModule = await loadArchiveModule();
         isInitialized = true;
-        console.log('RAR WASM library initialized successfully');
+        debug('RAR WASM library initialized successfully', { module: wasmModule && (wasmModule.open ? 'libarchive' : 'minimal') });
         return true;
       } catch (error) {
-        console.error('Failed to initialize RAR WASM library:', error);
+        err('Failed to initialize RAR WASM library:', error);
         return false;
       }
     },
@@ -64,13 +70,14 @@
 
       try {
         const archive = await openArchive(data, password);
-        const files = [];
+        const entries = await listArchiveEntries(archive);
+        const files = entries
+          .map((entry) => entry.path || entry.name || entry.fileName || '')
+          .filter((p) => !!p);
 
-        for (const entry of archive.entries) {
-          files.push(entry.path);
+        if (typeof archive.close === 'function') {
+          archive.close();
         }
-
-        archive.close();
 
         return {
           success: true,
@@ -101,20 +108,11 @@
 
       try {
         const archive = await openArchive(data, password);
-        const entries = [];
+        const entries = await extractArchiveEntries(archive);
 
-        for (const entry of archive.entries) {
-          if (!entry.isDirectory) {
-            const fileData = await entry.extract();
-            entries.push({
-              name: entry.path,
-              data: new Uint8Array(fileData),
-              size: fileData.byteLength
-            });
-          }
+        if (typeof archive.close === 'function') {
+          archive.close();
         }
-
-        archive.close();
 
         return {
           success: true,
@@ -134,50 +132,263 @@
   // Load the archive WASM module
   // This function loads libarchive.js or falls back to a minimal RAR implementation
   async function loadArchiveModule() {
-    // Try to load libarchive.js from CDN
+    // Prefer locally bundled assets so the web demo works offline too
+    const localBases = getLocalBaseUrls();
+    debug('Local base candidates', localBases);
+    for (const base of localBases) {
+      const archive = await tryLoadArchiveModuleFromBase(base);
+      if (archive) {
+        debug('Loaded libarchive from local base', base);
+        return archive;
+      }
+    }
+
+    // Try to load libarchive.js from CDN (UMD first, then ESM)
     const cdnUrls = [
+      'https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/libarchive.umd.js',
+      'https://unpkg.com/libarchive.js@2.0.2/dist/libarchive.umd.js',
       'https://cdn.jsdelivr.net/npm/libarchive.js@2.0.2/dist/libarchive.js',
       'https://unpkg.com/libarchive.js@2.0.2/dist/libarchive.js'
     ];
 
     for (const url of cdnUrls) {
       try {
-        // Check if Archive is already loaded
-        if (typeof Archive !== 'undefined') {
-          await Archive.init({
-            workerUrl: url.replace('libarchive.js', 'worker-bundle.js')
-          });
-          return Archive;
+        if (typeof Archive === 'undefined') {
+          await importArchiveLibrary([url]);
+          debug('Archive module imported from CDN', url);
         }
 
-        // Try to dynamically import
-        await loadScript(url);
-
         if (typeof Archive !== 'undefined') {
-          await Archive.init({
-            workerUrl: url.replace('libarchive.js', 'worker-bundle.js')
-          });
+          const workerUrl = url.replace('libarchive.js', 'worker-bundle.js');
+          await initArchive({ workerUrl, base: url, wasmUrl: url.replace('libarchive.js', 'libarchive.wasm') });
+          debug('Loaded libarchive from CDN', url);
           return Archive;
         }
       } catch (e) {
-        console.warn(`Failed to load from ${url}:`, e);
+        warn(`Failed to load from ${url}:`, e);
       }
     }
 
     // If libarchive.js fails, use the built-in minimal implementation
-    console.log('Using built-in RAR implementation');
+    warn('Using built-in minimal RAR implementation (no compression support)');
     return createMinimalRarModule();
+  }
+
+  // Normalize listing across libarchive.js and our minimal parser
+  async function listArchiveEntries(archive) {
+    if (!archive) {
+      throw new Error('Archive instance is null');
+    }
+
+    debug('Listing archive entries', { keys: Object.keys(archive || {}), hasEntries: !!archive.entries });
+
+    if (typeof archive.listFiles === 'function') {
+      return await archive.listFiles();
+    }
+
+    if (typeof archive.getFilesArray === 'function') {
+      return await archive.getFilesArray();
+    }
+
+    if (archive.entries) {
+      if (typeof archive.entries[Symbol.iterator] === 'function') {
+        return Array.from(archive.entries);
+      }
+      if (Array.isArray(archive.entries)) {
+        return archive.entries;
+      }
+      if (typeof archive.entries.length === 'number') {
+        return Array.from(archive.entries);
+      }
+    }
+
+    throw new Error('Archive entries not iterable');
+  }
+
+  // Normalize extraction across libarchive.js and our minimal parser
+  async function extractArchiveEntries(archive) {
+    if (!archive) {
+      throw new Error('Archive instance is null');
+    }
+
+    debug('Extracting archive entries', { keys: Object.keys(archive || {}), hasEntries: !!archive.entries });
+
+    // Preferred: libarchive.js extractFiles (includes fileData)
+    if (typeof archive.extractFiles === 'function') {
+      const files = await archive.extractFiles();
+      return files.map((f) => ({
+        name: f.path || f.fileName || f.name || '',
+        data: f.fileData ? new Uint8Array(f.fileData) : new Uint8Array(),
+        size: f.fileData ? f.fileData.byteLength : f.size || 0,
+      }));
+    }
+
+    // Minimal parser path (entries with extract())
+    const entries = normalizeEntriesArray(archive.entries);
+    if (entries) {
+      const result = [];
+      for (const entry of entries) {
+        if (!entry || entry.isDirectory) continue;
+        if (typeof entry.extract === 'function') {
+          const fileData = await entry.extract();
+          const uint8 = new Uint8Array(fileData);
+          result.push({
+            name: entry.path || entry.name || '',
+            data: uint8,
+            size: uint8.byteLength,
+          });
+        }
+      }
+      return result;
+    }
+
+    throw new Error('Archive entries not extractable');
+  }
+
+  function normalizeEntriesArray(entries) {
+    if (!entries) return null;
+    if (typeof entries[Symbol.iterator] === 'function') {
+      return Array.from(entries);
+    }
+    if (Array.isArray(entries)) {
+      return entries;
+    }
+    if (typeof entries.length === 'number') {
+      try {
+        return Array.from(entries);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Determine possible base URLs where libarchive assets might live
+  function getLocalBaseUrls() {
+    const bases = [];
+
+    // Try to derive from the current script tag (works with Flutter asset pipeline)
+    const script = document.currentScript || document.querySelector('script[src*="rar_web.js"]');
+    if (script && script.src) {
+      try {
+        const url = new URL(script.src, window.location.href);
+        const base = url.href.substring(0, url.href.lastIndexOf('/') + 1);
+        bases.push(base);
+      } catch (e) {
+        console.warn('Failed to resolve base URL from script', e);
+      }
+    }
+
+    // Common Flutter asset paths
+    bases.push('assets/packages/rar/');
+    bases.push('/assets/packages/rar/');
+    bases.push('./');
+
+    // Remove duplicates/empty entries
+    return Array.from(new Set(bases.filter(Boolean)));
+  }
+
+  // Try to load libarchive from a specific base path
+  async function tryLoadArchiveModuleFromBase(baseUrl) {
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    const scriptUrl = `${normalizedBase}libarchive.umd.js`;
+    const altScriptUrl = `${normalizedBase}libarchive.js`;
+    const workerUrl = `${normalizedBase}worker-bundle.js`;
+    const wasmUrl = `${normalizedBase}libarchive.wasm`;
+
+    try {
+      debug('Attempting load from base', normalizedBase);
+      if (typeof Archive === 'undefined') {
+        await importArchiveLibrary([scriptUrl, altScriptUrl]);
+        debug('Archive module imported', { scriptUrl });
+      }
+
+      if (typeof Archive !== 'undefined') {
+        await initArchive({ workerUrl, base: normalizedBase, wasmUrl });
+        return Archive;
+      }
+    } catch (e) {
+      warn(`Failed to load libarchive from ${scriptUrl}:`, e);
+    }
+
+    return null;
+  }
+
+  // Initialize Archive with a worker URL and a locateFile override so the WASM
+  // file is resolved relative to the same base (works in Flutter asset paths).
+  async function initArchive({ workerUrl, wasmUrl, base }) {
+    const baseUrl = ensureTrailingSlash(base || workerUrl.substring(0, workerUrl.lastIndexOf('/') + 1));
+    const locateFile = (path) => {
+      if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
+        return path;
+      }
+      return baseUrl + path;
+    };
+
+    const options = {
+      workerUrl,
+      locateFile,
+      wasmBinaryFile: wasmUrl
+    };
+
+    debug('Calling Archive.init', options);
+    return Archive.init(options);
+  }
+
+  function ensureTrailingSlash(url) {
+    if (!url) return '';
+    return url.endsWith('/') ? url : `${url}/`;
   }
 
   // Load a script dynamically
   function loadScript(url) {
     return new Promise((resolve, reject) => {
+      // Reuse an existing tag if the script is already in the document
+      const existing = Array.from(document.getElementsByTagName('script')).find(
+        (s) => s.src === url
+      );
+      if (existing) {
+        if (existing.dataset.loaded === 'true' || existing.readyState === 'complete') {
+          resolve();
+        } else {
+          existing.addEventListener('load', () => resolve());
+          existing.addEventListener('error', (err) => reject(err));
+        }
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = url;
-      script.onload = resolve;
+      script.async = true;
+      script.onload = () => {
+        script.dataset.loaded = 'true';
+        resolve();
+      };
       script.onerror = reject;
       document.head.appendChild(script);
     });
+  }
+
+  // Dynamically import archive library as a module and attach Archive to globalThis.
+  async function importArchiveLibrary(urls) {
+    let lastError;
+    for (const url of urls) {
+      if (!url) continue;
+      try {
+        debug('Importing archive module', url);
+        const mod = await import(/* webpackIgnore: true */ url);
+        const archiveExport = mod.Archive || mod.default;
+        if (!archiveExport) {
+          throw new Error('Archive export missing');
+        }
+        globalThis.Archive = archiveExport;
+        return archiveExport;
+      } catch (e) {
+        lastError = e;
+        warn('Import failed', url, e);
+      }
+    }
+    throw lastError || new Error('Failed to import Archive module');
   }
 
   // Open an archive from Uint8Array data
@@ -220,7 +431,31 @@
   function createMinimalRarModule() {
     return {
       parseRar: function(data, password) {
-        return new MinimalRarArchive(data, password);
+        // Ensure we have a proper Uint8Array with accessible buffer
+        // Data from Dart's JSUint8Array may need conversion
+        let uint8Data;
+        if (data instanceof Uint8Array) {
+          // Make a copy to ensure we have a proper ArrayBuffer
+          uint8Data = new Uint8Array(data);
+        } else if (ArrayBuffer.isView(data)) {
+          uint8Data = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        } else if (data instanceof ArrayBuffer) {
+          uint8Data = new Uint8Array(data);
+        } else if (data && typeof data.length === 'number') {
+          // Handle array-like objects from Dart
+          uint8Data = new Uint8Array(data.length);
+          for (let i = 0; i < data.length; i++) {
+            uint8Data[i] = data[i];
+          }
+        } else {
+          throw new Error('Invalid data type for RAR parsing: ' + (typeof data));
+        }
+
+        if (uint8Data.length === 0) {
+          throw new Error('RAR data is empty (0 bytes)');
+        }
+
+        return new MinimalRarArchive(uint8Data, password);
       }
     };
   }
@@ -229,6 +464,7 @@
   // Supports basic RAR v4 and v5 format parsing
   class MinimalRarArchive {
     constructor(data, password) {
+      // data should now be a proper Uint8Array with accessible buffer
       this.data = data;
       this.password = password;
       this.entries = [];
@@ -236,8 +472,12 @@
     }
 
     parse() {
-      const view = new DataView(this.data.buffer, this.data.byteOffset, this.data.byteLength);
-      let offset = 0;
+      // Validate we have a proper ArrayBuffer-backed Uint8Array
+      if (!this.data.buffer || !(this.data.buffer instanceof ArrayBuffer)) {
+        throw new Error('RAR data does not have a valid ArrayBuffer. Buffer type: ' + (typeof this.data.buffer));
+      }
+
+      const view = new DataView(this.data.buffer, this.data.byteOffset || 0, this.data.byteLength);
 
       // Check RAR signature
       // RAR 4.x: 0x52 0x61 0x72 0x21 0x1A 0x07 0x00
@@ -257,180 +497,272 @@
       }
 
       if (!isRar4 && !isRar5) {
-        throw new Error('Not a valid RAR archive');
+        const sigHex = Array.from(sig).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ');
+        throw new Error('Not a valid RAR archive. Signature bytes: ' + sigHex);
       }
 
       if (isRar5) {
-        offset = 8;
-        this.parseRar5(view, offset);
+        this.parseRar5(view, 8);
       } else {
-        offset = 7;
-        this.parseRar4(view, offset);
+        this.parseRar4(view, 7);
       }
     }
 
     parseRar4(view, offset) {
       // RAR 4.x format parsing
+      // Header flags
+      const LHD_LARGE = 0x0100;      // Large file (>2GB), has HIGH_PACK/UNP_SIZE fields
+      const LHD_UNICODE = 0x0200;    // Filename is Unicode encoded
+      const LONG_BLOCK = 0x8000;     // ADD_SIZE field present (packed data follows header)
+
       while (offset < this.data.length - 7) {
-        try {
-          // Read block header
-          const headerCrc = view.getUint16(offset, true);
-          const headerType = view.getUint8(offset + 2);
-          const headerFlags = view.getUint16(offset + 3, true);
-          const headerSize = view.getUint16(offset + 5, true);
+        // Read block header
+        const headerCrc = view.getUint16(offset, true);
+        const headerType = view.getUint8(offset + 2);
+        const headerFlags = view.getUint16(offset + 3, true);
+        const headerSize = view.getUint16(offset + 5, true);
 
-          if (headerSize < 7 || offset + headerSize > this.data.length) {
-            break;
+        if (headerSize < 7 || offset + headerSize > this.data.length) {
+          break; // End of valid headers
+        }
+
+        // File header (type 0x74)
+        if (headerType === 0x74) {
+          let packSize = view.getUint32(offset + 7, true);
+          let unpSize = view.getUint32(offset + 11, true);
+          const method = view.getUint8(offset + 25);
+          const nameSize = view.getUint16(offset + 26, true);
+          const fileAttr = view.getUint32(offset + 28, true);
+
+          // Handle LHD_LARGE flag - high bits for pack/unpack sizes
+          if (headerFlags & LHD_LARGE) {
+            const highPackSize = view.getUint32(offset + 32, true);
+            const highUnpSize = view.getUint32(offset + 36, true);
+            packSize = packSize + (highPackSize * 0x100000000);
+            unpSize = unpSize + (highUnpSize * 0x100000000);
           }
 
-          // File header (type 0x74)
-          if (headerType === 0x74) {
-            const packSize = view.getUint32(offset + 7, true);
-            const unpSize = view.getUint32(offset + 11, true);
-            const hostOS = view.getUint8(offset + 15);
-            const fileCrc = view.getUint32(offset + 16, true);
-            const fileTime = view.getUint32(offset + 20, true);
-            const unpackVersion = view.getUint8(offset + 24);
-            const method = view.getUint8(offset + 25);
-            const nameSize = view.getUint16(offset + 26, true);
-            const fileAttr = view.getUint32(offset + 28, true);
+          // The filename is at the END of the header, right before packed data
+          // headerSize includes everything from start of header to end of filename
+          const nameOffset = offset + headerSize - nameSize;
 
-            // Read filename
-            const nameBytes = this.data.slice(offset + 32, offset + 32 + nameSize);
-            const fileName = new TextDecoder().decode(nameBytes);
+          // Validate nameOffset is reasonable
+          if (nameOffset < offset + 32 || nameOffset + nameSize > offset + headerSize) {
+            // Skip malformed entry
+            offset += headerSize + packSize;
+            continue;
+          }
 
-            const isDirectory = (fileAttr & 0x10) !== 0;
+          // Read filename bytes
+          const nameBytes = this.data.slice(nameOffset, nameOffset + nameSize);
+          let fileName;
 
-            this.entries.push({
-              path: fileName,
-              isDirectory: isDirectory,
-              size: unpSize,
-              compressedSize: packSize,
-              _offset: offset + headerSize,
-              _packSize: packSize,
-              extract: async () => {
-                // For encrypted/compressed files, we need the full unrar implementation
-                // This minimal version only supports stored (uncompressed) files
-                if (method === 0x30) { // Stored
-                  return this.data.slice(offset + headerSize, offset + headerSize + packSize).buffer;
-                }
-                throw new Error('Compressed files require full RAR library. Please include libarchive.js.');
-              }
-            });
-
-            // Move to next header
-            const addSize = (headerFlags & 0x8000) ? view.getUint32(offset + 7, true) : packSize;
-            offset += headerSize + addSize;
-          } else {
-            // Skip other block types
-            // ADD_SIZE flag means there's additional data after the header
-            // The size of additional data is at offset 7 in the header (before we move offset)
-            let addSize = 0;
-            if (headerFlags & 0x8000) {
-              addSize = view.getUint32(offset + 7, true);
+          // Handle Unicode filenames (LHD_UNICODE flag)
+          if (headerFlags & LHD_UNICODE) {
+            // Unicode format: ASCII name + null byte + encoded Unicode data
+            const nullIndex = Array.from(nameBytes).indexOf(0);
+            if (nullIndex > 0 && nullIndex < nameBytes.length - 1) {
+              // Has Unicode part - decode the Unicode portion
+              fileName = this.decodeUnicodeName(nameBytes, nullIndex);
+            } else if (nullIndex === -1) {
+              // No null terminator, treat as UTF-8
+              fileName = new TextDecoder('utf-8').decode(nameBytes);
+            } else {
+              // Just ASCII part
+              fileName = new TextDecoder('utf-8').decode(nameBytes.slice(0, nullIndex));
             }
-            offset += headerSize + addSize;
+          } else {
+            // Standard filename - try UTF-8
+            fileName = new TextDecoder('utf-8').decode(nameBytes);
           }
-        } catch (e) {
+
+          // Normalize path separators
+          fileName = fileName.replace(/\\/g, '/');
+
+          const isDirectory = (fileAttr & 0x10) !== 0 || fileName.endsWith('/');
+
+          const capturedOffset = offset;
+          const capturedHeaderSize = headerSize;
+          const capturedPackSize = packSize;
+          const capturedMethod = method;
+
+          this.entries.push({
+            path: fileName,
+            isDirectory: isDirectory,
+            size: unpSize,
+            compressedSize: packSize,
+            _offset: offset + headerSize,
+            _packSize: packSize,
+            extract: async () => {
+              if (capturedMethod === 0x30) { // Stored (no compression)
+                return this.data.slice(capturedOffset + capturedHeaderSize, capturedOffset + capturedHeaderSize + capturedPackSize).buffer;
+              }
+              throw new Error('Compressed files require full RAR library. Please include libarchive.js.');
+            }
+          });
+
+          // Move to next header - packed data follows the header
+          offset += headerSize + packSize;
+        } else if (headerType === 0x7b) {
+          // End of archive marker
           break;
+        } else {
+          // Skip other block types
+          let addSize = 0;
+          if (headerFlags & LONG_BLOCK) {
+            addSize = view.getUint32(offset + 7, true);
+          }
+          offset += headerSize + addSize;
         }
       }
     }
 
-    parseRar5(view, offset) {
-      // RAR 5.x format parsing (simplified)
-      while (offset < this.data.length - 4) {
-        try {
-          // Read header CRC32 (4 bytes)
-          const headerCrc = view.getUint32(offset, true);
-          offset += 4;
+    // Decode RAR Unicode filename format
+    decodeUnicodeName(nameBytes, nullIndex) {
+      // RAR Unicode encoding: ASCII name + 0x00 + high byte flags + encoded chars
+      const asciiPart = new TextDecoder('utf-8').decode(nameBytes.slice(0, nullIndex));
+      const unicodeData = nameBytes.slice(nullIndex + 1);
 
-          // Read header size (vint)
-          const { value: headerSize, bytesRead: hb } = this.readVInt(view, offset);
-          offset += hb;
+      if (unicodeData.length === 0) {
+        return asciiPart;
+      }
 
-          if (headerSize < 1 || offset + headerSize > this.data.length) {
-            break;
-          }
+      // The Unicode encoding uses the ASCII name as a base and encodes differences
+      let result = '';
+      let asciiPos = 0;
+      let dataPos = 0;
+      let highByte = unicodeData[dataPos++] || 0;
 
-          const headerStart = offset;
+      while (asciiPos < asciiPart.length && dataPos <= unicodeData.length) {
+        const flags = dataPos < unicodeData.length ? unicodeData[dataPos++] : 0;
 
-          // Read header type (vint)
-          const { value: headerType, bytesRead: tb } = this.readVInt(view, offset);
-          offset += tb;
+        for (let i = 0; i < 4 && asciiPos < asciiPart.length; i++) {
+          const flagBits = (flags >> (i * 2)) & 0x03;
 
-          // Read header flags (vint)
-          const { value: headerFlags, bytesRead: fb } = this.readVInt(view, offset);
-          offset += fb;
-
-          // File header (type 2)
-          if (headerType === 2) {
-            // File header
-            const { value: fileFlags, bytesRead: ffb } = this.readVInt(view, offset);
-            offset += ffb;
-
-            const { value: unpSize, bytesRead: ub } = this.readVInt(view, offset);
-            offset += ub;
-
-            const { value: attributes, bytesRead: ab } = this.readVInt(view, offset);
-            offset += ab;
-
-            // Skip mtime if present
-            if (fileFlags & 0x02) {
-              offset += 4;
-            }
-
-            // Skip data CRC if present
-            if (fileFlags & 0x04) {
-              offset += 4;
-            }
-
-            // Read compression info
-            const { value: compInfo, bytesRead: cb } = this.readVInt(view, offset);
-            offset += cb;
-
-            // Read host OS
-            const { value: hostOS, bytesRead: ob } = this.readVInt(view, offset);
-            offset += ob;
-
-            // Read name length
-            const { value: nameLen, bytesRead: nb } = this.readVInt(view, offset);
-            offset += nb;
-
-            // Read filename
-            const nameBytes = this.data.slice(offset, offset + nameLen);
-            const fileName = new TextDecoder('utf-8').decode(nameBytes);
-
-            const isDirectory = (fileFlags & 0x01) !== 0;
-
-            // Get data size from extra area or calculate
-            let packSize = 0;
-            if (headerFlags & 0x0001) {
-              // Extra area present, parse to find data size
-              // For simplicity, estimate from header
-            }
-
-            this.entries.push({
-              path: fileName,
-              isDirectory: isDirectory,
-              size: Number(unpSize),
-              compressedSize: packSize,
-              extract: async () => {
-                throw new Error('RAR 5.x extraction requires full RAR library. Please include libarchive.js.');
+          switch (flagBits) {
+            case 0: // Use ASCII char
+              result += asciiPart[asciiPos++];
+              break;
+            case 1: // Use ASCII char + high byte
+              if (dataPos < unicodeData.length) {
+                const lowByte = asciiPart.charCodeAt(asciiPos++);
+                result += String.fromCharCode((highByte << 8) | lowByte);
+              } else {
+                result += asciiPart[asciiPos++];
               }
-            });
+              break;
+            case 2: // Use next byte + high byte
+              if (dataPos < unicodeData.length) {
+                const lowByte = unicodeData[dataPos++];
+                result += String.fromCharCode((highByte << 8) | lowByte);
+                asciiPos++;
+              } else {
+                result += asciiPart[asciiPos++];
+              }
+              break;
+            case 3: // Use next two bytes
+              if (dataPos + 1 < unicodeData.length) {
+                const lowByte = unicodeData[dataPos++];
+                const newHighByte = unicodeData[dataPos++];
+                result += String.fromCharCode((newHighByte << 8) | lowByte);
+                asciiPos++;
+              } else {
+                result += asciiPart[asciiPos++];
+              }
+              break;
+          }
+        }
+      }
+
+      return result || asciiPart;
+    }
+
+    parseRar5(view, offset) {
+      // RAR 5.x format parsing
+      while (offset < this.data.length - 4) {
+        // Read header CRC32 (4 bytes)
+        const headerCrc = view.getUint32(offset, true);
+        offset += 4;
+
+        // Read header size (vint)
+        const { value: headerSize, bytesRead: hb } = this.readVInt(view, offset);
+        offset += hb;
+
+        if (headerSize < 1 || offset + Number(headerSize) > this.data.length) {
+          break; // End of valid headers
+        }
+
+        const headerStart = offset;
+
+        // Read header type (vint)
+        const { value: headerType, bytesRead: tb } = this.readVInt(view, offset);
+        offset += tb;
+
+        // Read header flags (vint)
+        const { value: headerFlags, bytesRead: fb } = this.readVInt(view, offset);
+        offset += fb;
+
+        // File header (type 2)
+        if (headerType === BigInt(2)) {
+          // File header
+          const { value: fileFlags, bytesRead: ffb } = this.readVInt(view, offset);
+          offset += ffb;
+
+          const { value: unpSize, bytesRead: ub } = this.readVInt(view, offset);
+          offset += ub;
+
+          const { value: attributes, bytesRead: ab } = this.readVInt(view, offset);
+          offset += ab;
+
+          // Skip mtime if present
+          if (fileFlags & BigInt(0x02)) {
+            offset += 4;
           }
 
-          // Move to next header
-          offset = headerStart + Number(headerSize);
-
-          // Skip data area if present
-          if (headerFlags & 0x0002) {
-            const { value: dataSize, bytesRead: db } = this.readVInt(view, offset);
-            offset += db + Number(dataSize);
+          // Skip data CRC if present
+          if (fileFlags & BigInt(0x04)) {
+            offset += 4;
           }
-        } catch (e) {
+
+          // Read compression info
+          const { value: compInfo, bytesRead: cb } = this.readVInt(view, offset);
+          offset += cb;
+
+          // Read host OS
+          const { value: hostOS, bytesRead: ob } = this.readVInt(view, offset);
+          offset += ob;
+
+          // Read name length
+          const { value: nameLen, bytesRead: nb } = this.readVInt(view, offset);
+          offset += nb;
+
+          // Read filename
+          const nameBytes = this.data.slice(offset, offset + Number(nameLen));
+          const fileName = new TextDecoder('utf-8').decode(nameBytes);
+
+          const isDirectory = (fileFlags & BigInt(0x01)) !== BigInt(0);
+
+          this.entries.push({
+            path: fileName,
+            isDirectory: isDirectory,
+            size: Number(unpSize),
+            compressedSize: 0,
+            extract: async () => {
+              throw new Error('RAR 5.x extraction requires full RAR library. Please include libarchive.js.');
+            }
+          });
+        } else if (headerType === BigInt(5)) {
+          // End of archive marker
           break;
+        }
+
+        // Move to next header
+        offset = headerStart + Number(headerSize);
+
+        // Skip data area if present
+        if (headerFlags & BigInt(0x0002)) {
+          const { value: dataSize, bytesRead: db } = this.readVInt(view, offset);
+          offset += db + Number(dataSize);
         }
       }
     }

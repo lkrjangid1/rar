@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -27,14 +28,25 @@
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png">
 
   <title>rar_example</title>
   <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
+  <!-- Preload libarchive as an ES module so import.meta works -->
+  <script type="module">
+    import * as libarchive from './assets/packages/rar/libarchive.js';
+    // Expose Archive globally for the plugin loader
+    window.Archive = libarchive.Archive || libarchive.default || libarchive;
+    // Hint the base path for worker/wasm resolution
+    window.RAR_LIB_BASE = './assets/packages/rar/';
+  </script>
+
   <!-- RAR plugin JavaScript - must load before Flutter -->
-  <script src="rar_web.js"></script>
+  <script src="assets/packages/rar/rar_web.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>

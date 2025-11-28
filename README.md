@@ -63,7 +63,13 @@ vcpkg install libarchive:x64-windows
 
 ### Web Dependencies
 
-For web platform, the plugin automatically loads the required WASM library from CDN. No additional setup is required.
+The plugin ships the `libarchive.js` WASM runtime so the web demo works even without network access. Add the loader script to your `web/index.html` before `flutter_bootstrap.js`:
+
+```html
+<script src="assets/packages/rar/rar_web.js"></script>
+```
+
+The script will first try the bundled WASM/worker assets (`libarchive.js`, `worker-bundle.js`), then fall back to a CDN only if the local files are missing.
 
 ## Usage
 
