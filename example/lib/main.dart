@@ -163,10 +163,6 @@ class _MyAppState extends State<MyApp> {
           _status = 'Extraction failed: ${extractResult['message']}';
         });
       }
-    } catch (e) {
-      setState(() {
-        _status = 'Error: $e';
-      });
     } finally {
       setState(() {
         _isProcessing = false;
@@ -241,10 +237,6 @@ class _MyAppState extends State<MyApp> {
           _status = 'Failed to list contents: ${listResult['message']}';
         });
       }
-    } catch (e) {
-      setState(() {
-        _status = 'Error: $e';
-      });
     } finally {
       setState(() {
         _isProcessing = false;

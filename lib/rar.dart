@@ -13,6 +13,11 @@ import 'rar_platform_interface.dart';
 // custom platform implementations or test mocks.
 export 'rar_platform_interface.dart';
 
+// Export platform-specific implementations for federated plugin registration.
+// These are conditionally used by Flutter's plugin system.
+export 'src/rar_linux.dart' if (dart.library.io) 'src/rar_linux.dart';
+export 'src/rar_windows.dart' if (dart.library.io) 'src/rar_windows.dart';
+
 /// A Flutter plugin for handling RAR archive files.
 ///
 /// Supports:

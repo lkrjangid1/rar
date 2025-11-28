@@ -35,13 +35,14 @@ flutter:
         pluginClass: RarPlugin
       ios:
         pluginClass: RarPlugin
-      # Desktop platforms use FFI with native libarchive wrapper
+      # Linux uses FFI with native libarchive wrapper
       linux:
         pluginClass: RarPlugin
         dartPluginClass: RarLinux
+      # macOS uses UnrarKit via method channels (like iOS)
       macos:
         pluginClass: RarPlugin
-        dartPluginClass: RarMacOS
+      # Windows uses FFI with native libarchive wrapper
       windows:
         pluginClass: RarPluginCApi
         dartPluginClass: RarWindows
