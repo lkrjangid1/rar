@@ -12,11 +12,10 @@
 // - View file contents (images, text, binary)
 // - Password-protected archive support
 
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';

@@ -60,7 +60,7 @@ abstract class RarPlatform extends PlatformInterface {
   /// Returns a map with:
   /// - 'success': bool - Whether the listing was successful
   /// - 'message': String - Status message or error description
-  /// - 'files': List<String> - List of file names in the archive
+  /// - 'files': `List<String>` - List of file names in the archive
   Future<Map<String, dynamic>> listRarContents({
     required String rarFilePath,
     String? password,

@@ -124,7 +124,8 @@ class RarWeb extends RarPlatform {
         // or trigger downloads depending on the implementation
         final entries = result.entries;
         if (entries != null) {
-          final fileCount = entries.length;
+          final entriesList = entries.toDart;
+          final fileCount = entriesList.length;
           // Store in web storage or make available for download
           await _storeExtractedFiles(destinationPath, entries);
           return {
@@ -246,7 +247,7 @@ class RarWeb extends RarPlatform {
         return null;
       }
       final arrayBuffer = await response.arrayBuffer().toDart;
-      return arrayBuffer.toDart.asUint8List();
+      return Uint8List.view(arrayBuffer.toDart);
     } catch (e) {
       return null;
     }
@@ -254,10 +255,11 @@ class RarWeb extends RarPlatform {
 
   /// Store extracted files in web storage or virtual file system.
   Future<void> _storeExtractedFiles(String basePath, JSArray<RarFileEntry> entries) async {
-    for (var i = 0; i < entries.length; i++) {
-      final entry = entries[i];
+    final entriesList = entries.toDart;
+    for (var i = 0; i < entriesList.length; i++) {
+      final entry = entriesList[i];
       final fullPath = '$basePath/${entry.name}';
-      _virtualFileSystem[fullPath] = entry.data.toDart.asUint8List();
+      _virtualFileSystem[fullPath] = entry.data.toDart;
     }
   }
 

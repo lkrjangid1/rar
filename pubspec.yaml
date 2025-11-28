@@ -8,23 +8,19 @@ repository: https://github.com/lkrjangid1/rar
 issue_tracker: https://github.com/lkrjangid1/rar/issues
 
 environment:
-  sdk: '>=3.4.4 <4.0.0'
-  flutter: '>=3.3.0'
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  # Platform interface for federated plugin architecture
-  plugin_platform_interface: ^2.1.0
-  # FFI support for desktop platforms
-  ffi: ^2.0.0
+  plugin_platform_interface: ^2.1.8
+  ffi: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-  # For regenerating FFI bindings if needed (optional)
-  ffigen: ^16.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   plugin:

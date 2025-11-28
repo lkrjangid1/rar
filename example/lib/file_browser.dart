@@ -607,7 +607,7 @@ class _FileBrowserState extends State<FileBrowser> {
     // Show hex dump with ASCII representation
     final lines = <Widget>[];
     const bytesPerLine = 16;
-    final maxLines = 100; // Limit for performance
+    const maxLines = 100; // Limit for performance
 
     for (var i = 0; i < content.length && i < maxLines * bytesPerLine; i += bytesPerLine) {
       final end = (i + bytesPerLine).clamp(0, content.length);

@@ -17,6 +17,7 @@ export 'rar_platform_interface.dart';
 // These are conditionally used by Flutter's plugin system.
 export 'src/rar_linux.dart' if (dart.library.io) 'src/rar_linux.dart';
 export 'src/rar_windows.dart' if (dart.library.io) 'src/rar_windows.dart';
+export 'src/rar_web_stub.dart' if (dart.library.js_interop) 'src/rar_web.dart';
 
 /// A Flutter plugin for handling RAR archive files.
 ///
@@ -117,7 +118,7 @@ class Rar {
   /// Returns a map with:
   /// - 'success': bool - Whether the listing was successful
   /// - 'message': String - Status message or error description
-  /// - 'files': List<String> - List of file names in the archive (empty on failure)
+  /// - 'files': `List<String>` - List of file names in the archive (empty on failure)
   ///
   /// Platform support:
   /// - Android: Full support via JUnRar

@@ -4,7 +4,7 @@
 
 import 'dart:typed_data';
 
-import 'package:rar/src/rar_web.dart';
+import 'package:rar/rar.dart';
 
 /// Get the platform name.
 String getPlatformName() => 'Web (WASM)';
