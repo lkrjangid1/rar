@@ -1,256 +1,217 @@
 // example/lib/main.dart
 //
-// Example app demonstrating the RAR plugin on all supported platforms:
-// - Android, iOS (mobile)
-// - Linux, macOS, Windows (desktop)
-// - Web
-//
+// RAR Archive Browser - A two-pane file browser for RAR archives.
 // Features:
-// - List RAR archive contents
-// - Extract RAR archives
-// - Browse extracted files with file tree
-// - View file contents (images, text, binary)
-// - Password-protected archive support
-
-import 'dart:async';
+// - Open RAR button to select archives
+// - Two-pane layout on wide screens, tabs on narrow screens (<800px)
+// - File tree with expandable folders
+// - Content viewer for text and images
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:rar/rar.dart';
 
 import 'file_browser.dart';
 
-// Conditional imports for platform-specific code
 import 'platform_stub.dart'
     if (dart.library.io) 'platform_io.dart'
     if (dart.library.html) 'platform_web.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const RarBrowserApp());
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class RarBrowserApp extends StatelessWidget {
+  const RarBrowserApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'RAR Browser',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+      ),
+      home: const RarBrowserPage(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  String _status = 'Ready';
-  String _platformInfo = '';
-  List<String> _fileList = [];
-  bool _isProcessing = false;
-  String? _passwordInput;
-  String? _lastExtractPath;
-  String? _lastRarFilePath;
+class RarBrowserPage extends StatefulWidget {
+  const RarBrowserPage({super.key});
+
+  @override
+  State<RarBrowserPage> createState() => _RarBrowserPageState();
+}
+
+class _RarBrowserPageState extends State<RarBrowserPage>
+    with SingleTickerProviderStateMixin {
+  FileNode? _root;
+  FileNode? _selectedFile;
+  Uint8List? _fileContent;
+  bool _isLoading = false;
+  bool _isLoadingContent = false;
+  String? _error;
+  String? _archiveName;
+  String? _extractPath;
+  String? _password;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _initPlatform();
-    _testListRarContents();
+    _tabController = TabController(length: 2, vsync: this);
+    requestPlatformPermissions();
   }
 
-  Future<void> _testListRarContents() async {
-    // This is for testing purposes only
-    try {
-      await Rar.listRarContents(rarFilePath: 'test.rar');
-    } catch (e) {
-      // ignore: avoid_print
-      print('Test error: $e');
-    }
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
-  Future<void> _initPlatform() async {
-    await requestPlatformPermissions();
+  Future<void> _openRarFile() async {
     setState(() {
-      _platformInfo = getPlatformName();
+      _isLoading = true;
+      _error = null;
     });
-  }
 
-  Future<String?> _getDestinationPath() async {
-    try {
-      if (kIsWeb) {
-        return '/extracted';
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['rar'],
+      withData: kIsWeb,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    final file = result.files.single;
+    String? filePath = file.path;
+
+    if (kIsWeb) {
+      if (file.bytes == null) {
+        setState(() {
+          _error = 'Could not read file data';
+          _isLoading = false;
+        });
+        return;
       }
+      storeWebFileData(file.name, file.bytes!);
+      filePath = file.name;
+    }
+
+    if (filePath == null) {
+      setState(() {
+        _error = 'Invalid file path';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    _archiveName = file.name;
+
+    // Get extraction path
+    String extractPath;
+    if (kIsWeb) {
+      extractPath = '/extracted';
+    } else {
       final directory = await getApplicationDocumentsDirectory();
-      return '${directory.path}/rar_extracted';
-    } catch (e) {
-      return null;
+      extractPath = '${directory.path}/rar_extracted';
+      await createDirectory(extractPath);
     }
-  }
+    _extractPath = extractPath;
 
-  Future<void> _pickAndExtractRarFile() async {
-    setState(() {
-      _isProcessing = true;
-      _status = 'Selecting RAR file...';
-      _fileList = [];
-    });
+    // Extract the archive to access file contents
+    final extractResult = await Rar.extractRarFile(
+      rarFilePath: filePath,
+      destinationPath: extractPath,
+      password: _password,
+    );
 
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['rar'],
-        withData: kIsWeb,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        setState(() {
-          _status = 'No file selected';
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      final file = result.files.single;
-      String? filePath = file.path;
-
-      if (kIsWeb) {
-        if (file.bytes == null) {
-          setState(() {
-            _status = 'Could not read file data (web)';
-            _isProcessing = false;
-          });
-          return;
-        }
-        storeWebFileData(file.name, file.bytes!);
-        filePath = file.name;
-      }
-
-      if (filePath == null) {
-        setState(() {
-          _status = 'Invalid file path';
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      _lastRarFilePath = filePath;
-
-      setState(() {
-        _status = 'Selected: ${file.name}';
-      });
-
-      final extractPath = await _getDestinationPath();
-      if (extractPath == null) {
-        setState(() {
-          _status = 'Could not access storage directory';
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      if (!kIsWeb) {
-        await createDirectory(extractPath);
-      }
-
-      setState(() {
-        _status = 'Extracting to $extractPath...';
-      });
-
-      final extractResult = await Rar.extractRarFile(
-        rarFilePath: filePath,
-        destinationPath: extractPath,
-        password: _passwordInput,
-      );
-
-      if (extractResult['success'] == true) {
-        _lastExtractPath = extractPath;
-        setState(() {
-          _status = 'Extraction successful: ${extractResult['message']}';
-        });
-
-        final files = await listDirectoryContents(extractPath);
-        setState(() {
-          _fileList = files;
-        });
-      } else {
-        setState(() {
-          _status = 'Extraction failed: ${extractResult['message']}';
-        });
-      }
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  Future<void> _listRarContents() async {
-    setState(() {
-      _isProcessing = true;
-      _status = 'Selecting RAR file...';
-      _fileList = [];
-    });
-
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['rar'],
-        withData: kIsWeb,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        setState(() {
-          _status = 'No file selected';
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      final file = result.files.single;
-      String? filePath = file.path;
-
-      if (kIsWeb) {
-        if (file.bytes == null) {
-          setState(() {
-            _status = 'Could not read file data (web)';
-            _isProcessing = false;
-          });
-          return;
-        }
-        storeWebFileData(file.name, file.bytes!);
-        filePath = file.name;
-      }
-
-      if (filePath == null) {
-        setState(() {
-          _status = 'Invalid file path';
-          _isProcessing = false;
-        });
-        return;
-      }
-
-      _lastRarFilePath = filePath;
-
-      setState(() {
-        _status = 'Listing contents of: ${file.name}';
-      });
-
+    if (extractResult['success'] != true) {
+      // Try listing contents instead (in case extraction failed but listing works)
       final listResult = await Rar.listRarContents(
         rarFilePath: filePath,
-        password: _passwordInput,
+        password: _password,
       );
 
       if (listResult['success'] == true) {
-        final files = listResult['files'];
+        final files = List<String>.from(listResult['files'] as List);
         setState(() {
-          _status = 'Listed ${(files as List).length} files in archive';
-          _fileList = List<String>.from(files);
+          _root = FileNode.buildTree(files, rootName: file.name);
+          _selectedFile = null;
+          _fileContent = null;
+          _extractPath = null; // Can't load content without extraction
+          _isLoading = false;
         });
-      } else {
-        setState(() {
-          _status = 'Failed to list contents: ${listResult['message']}';
-        });
+        return;
       }
-    } finally {
+
       setState(() {
-        _isProcessing = false;
+        _error = extractResult['message'] ?? 'Failed to open archive';
+        _isLoading = false;
       });
+      return;
+    }
+
+    // List the extracted files
+    final files = await listDirectoryContents(extractPath);
+
+    // Also get the archive structure from the RAR itself for better tree
+    final listResult = await Rar.listRarContents(
+      rarFilePath: filePath,
+      password: _password,
+    );
+
+    List<String> archiveFiles;
+    if (listResult['success'] == true) {
+      archiveFiles = List<String>.from(listResult['files'] as List);
+    } else {
+      archiveFiles = files;
+    }
+
+    setState(() {
+      _root = FileNode.buildTree(archiveFiles, rootName: file.name);
+      _selectedFile = null;
+      _fileContent = null;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _loadFileContent(FileNode node) async {
+    if (_extractPath == null) {
+      setState(() {
+        _fileContent = null;
+        _error = 'Content not available (archive not extracted)';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoadingContent = true;
+      _selectedFile = node;
+      _fileContent = null;
+    });
+
+    final fullPath = '$_extractPath/${node.path}';
+    final content = await loadFileContent(fullPath);
+
+    setState(() {
+      _fileContent = content;
+      _isLoadingContent = false;
+    });
+
+    // Switch to content tab on narrow screens
+    if (_tabController.index == 0 && mounted) {
+      _tabController.animateTo(1);
     }
   }
 
@@ -258,32 +219,29 @@ class _MyAppState extends State<MyApp> {
     showDialog(
       context: context,
       builder: (context) {
-        String password = _passwordInput ?? '';
+        String password = _password ?? '';
         return AlertDialog(
           title: const Text('Archive Password'),
           content: TextField(
             obscureText: true,
             decoration: const InputDecoration(
               hintText: 'Enter password (leave empty for none)',
+              border: OutlineInputBorder(),
             ),
             onChanged: (value) => password = value,
-            controller: TextEditingController(text: _passwordInput),
+            controller: TextEditingController(text: _password),
           ),
           actions: [
             TextButton(
               onPressed: () {
-                setState(() {
-                  _passwordInput = null;
-                });
+                setState(() => _password = null);
                 Navigator.pop(context);
               },
               child: const Text('Clear'),
             ),
-            TextButton(
+            FilledButton(
               onPressed: () {
-                setState(() {
-                  _passwordInput = password.isEmpty ? null : password;
-                });
+                setState(() => _password = password.isEmpty ? null : password);
                 Navigator.pop(context);
               },
               child: const Text('Set'),
@@ -294,265 +252,455 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  void _openFileBrowser() {
-    if (_fileList.isEmpty) return;
-
-    final root = FileNode.buildTree(
-      _fileList,
-      rootName: _lastRarFilePath?.split('/').last ?? 'Archive',
-    );
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => FileBrowserPage(
-          root: root,
-          title: 'Archive Contents',
-          onLoadContent: _lastExtractPath != null ? _loadFileContent : null,
-        ),
-      ),
-    );
-  }
-
-  Future<Uint8List?> _loadFileContent(String path) async {
-    if (_lastExtractPath == null) return null;
-    final fullPath = '$_lastExtractPath/$path';
-    return await loadFileContent(fullPath);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'RAR Plugin Example',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_archiveName ?? 'RAR Browser'),
+        actions: [
+          IconButton(
+            icon: Icon(_password != null ? Icons.lock : Icons.lock_open),
+            tooltip: 'Set password',
+            onPressed: _showPasswordDialog,
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilledButton.icon(
+              onPressed: _isLoading ? null : _openRarFile,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Open RAR'),
+            ),
+          ),
+        ],
       ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('RAR Plugin Example'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          actions: [
-            IconButton(
-              icon: Icon(_passwordInput != null ? Icons.lock : Icons.lock_open),
-              tooltip: 'Set password',
-              onPressed: _showPasswordDialog,
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Opening archive...'),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _openRarFile,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Try Again'),
             ),
           ],
         ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Platform info card
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              _getPlatformIcon(),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Platform: $_platformInfo',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ],
-                        ),
-                        if (_passwordInput != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.lock, size: 16),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Password set',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+      );
+    }
+
+    if (_root == null) {
+      return _buildEmptyState();
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 800) {
+          return _buildWideLayout();
+        } else {
+          return _buildNarrowLayout();
+        }
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.archive, size: 80, color: Colors.grey.shade400),
+          const SizedBox(height: 24),
+          Text(
+            'RAR Archive Browser',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: Colors.grey.shade600,
                 ),
-                const SizedBox(height: 16),
-
-                // Status card
-                Card(
-                  color: _status.contains('failed') || _status.contains('Error')
-                      ? Colors.red.shade50
-                      : _status.contains('successful')
-                          ? Colors.green.shade50
-                          : null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _status.contains('failed') || _status.contains('Error')
-                              ? Icons.error_outline
-                              : _status.contains('successful')
-                                  ? Icons.check_circle_outline
-                                  : Icons.info_outline,
-                          color: _status.contains('failed') || _status.contains('Error')
-                              ? Colors.red
-                              : _status.contains('successful')
-                                  ? Colors.green
-                                  : null,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _status,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isProcessing ? null : _listRarContents,
-                        icon: const Icon(Icons.list),
-                        label: const Text('List Contents'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isProcessing ? null : _pickAndExtractRarFile,
-                        icon: const Icon(Icons.unarchive),
-                        label: const Text('Extract'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Browse button (only visible when files are available)
-                if (_fileList.isNotEmpty)
-                  ElevatedButton.icon(
-                    onPressed: _openFileBrowser,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Browse Files'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
-                    ),
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Processing indicator
-                if (_isProcessing)
-                  const LinearProgressIndicator(),
-
-                const SizedBox(height: 16),
-
-                // File list
-                if (_fileList.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Files (${_fileList.length}):',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      TextButton.icon(
-                        onPressed: _openFileBrowser,
-                        icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text('Open Browser'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Card(
-                      child: ListView.builder(
-                        itemCount: _fileList.length,
-                        itemBuilder: (context, index) {
-                          final fileName = _fileList[index];
-                          final isDirectory = fileName.endsWith('/');
-                          return ListTile(
-                            leading: Icon(
-                              isDirectory ? Icons.folder : _getFileIcon(fileName),
-                              color: isDirectory ? Colors.amber : Colors.blue,
-                            ),
-                            title: Text(
-                              fileName,
-                              style: const TextStyle(fontFamily: 'monospace'),
-                            ),
-                            dense: true,
-                            onTap: () {
-                              if (!isDirectory && _lastExtractPath != null) {
-                                _openFileBrowser();
-                              }
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ] else
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.archive,
-                            size: 64,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Select a RAR file to list or extract its contents',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Supports RAR v4 and v5 formats',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            'Open a RAR file to browse its contents',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 32),
+          FilledButton.icon(
+            onPressed: _openRarFile,
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Open RAR File'),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Supports RAR v4 and v5 formats',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+          ),
+        ],
       ),
     );
   }
 
-  IconData _getPlatformIcon() {
-    if (kIsWeb) return Icons.web;
-    if (_platformInfo.contains('Android')) return Icons.android;
-    if (_platformInfo.contains('iOS')) return Icons.phone_iphone;
-    if (_platformInfo.contains('Linux')) return Icons.desktop_windows;
-    if (_platformInfo.contains('macOS')) return Icons.laptop_mac;
-    if (_platformInfo.contains('Windows')) return Icons.desktop_windows;
-    return Icons.devices;
+  Widget _buildWideLayout() {
+    return Row(
+      children: [
+        SizedBox(
+          width: 320,
+          child: _buildFilesPane(),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: _buildContentPane(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowLayout() {
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.folder), text: 'Files'),
+            Tab(icon: Icon(Icons.preview), text: 'Content'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildFilesPane(),
+              _buildContentPane(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilesPane() {
+    if (_root == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: Row(
+            children: [
+              const Icon(Icons.archive),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _root!.name,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${_countFiles(_root!)} files',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: _root!.children
+                .map((child) => _buildTreeNode(child, 0))
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _countFiles(FileNode node) {
+    var count = 0;
+    for (final child in node.children) {
+      if (child.isDirectory) {
+        count += _countFiles(child);
+      } else {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  Widget _buildTreeNode(FileNode node, int depth) {
+    final isSelected = _selectedFile == node;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (node.isDirectory) {
+                setState(() => node.isExpanded = !node.isExpanded);
+              } else {
+                _loadFileContent(node);
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 12.0 + depth * 20.0,
+                top: 10,
+                bottom: 10,
+                right: 12,
+              ),
+              child: Row(
+                children: [
+                  if (node.isDirectory)
+                    Icon(
+                      node.isExpanded
+                          ? Icons.keyboard_arrow_down
+                          : Icons.keyboard_arrow_right,
+                      size: 20,
+                      color: Colors.grey,
+                    )
+                  else
+                    const SizedBox(width: 20),
+                  const SizedBox(width: 4),
+                  Icon(
+                    node.isDirectory
+                        ? (node.isExpanded ? Icons.folder_open : Icons.folder)
+                        : _getFileIcon(node.name),
+                    size: 20,
+                    color: node.isDirectory
+                        ? Colors.amber.shade700
+                        : _getFileIconColor(node.name),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      node.name,
+                      style: TextStyle(
+                        fontWeight: node.isDirectory
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (node.isDirectory && node.isExpanded)
+          ...node.children.map((child) => _buildTreeNode(child, depth + 1)),
+      ],
+    );
+  }
+
+  Widget _buildContentPane() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          child: Row(
+            children: [
+              Icon(
+                _selectedFile != null
+                    ? _getFileIcon(_selectedFile!.name)
+                    : Icons.preview,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _selectedFile?.name ?? 'Select a file',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_fileContent != null)
+                Text(
+                  _formatSize(_fileContent!.length),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _buildContentView(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContentView() {
+    if (_selectedFile == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.touch_app, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Select a file from the tree',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_isLoadingContent) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_extractPath == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.visibility_off, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Preview not available',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Archive was not extracted',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_fileContent == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Could not load file',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final ext = _selectedFile!.name.split('.').last.toLowerCase();
+
+    // Image files
+    if (_isImageExtension(ext)) {
+      return InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 4.0,
+        child: Center(
+          child: Image.memory(
+            _fileContent!,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.broken_image, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text('Failed to load image: $error'),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    // Text files
+    if (_isTextExtension(ext)) {
+      String text;
+      try {
+        text = String.fromCharCodes(_fileContent!);
+      } catch (e) {
+        text = _fileContent!.map((b) => String.fromCharCode(b)).join();
+      }
+
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: SelectableText(
+          text,
+          style: const TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+      );
+    }
+
+    // Binary files - show info
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(_getFileIcon(_selectedFile!.name),
+              size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            _selectedFile!.name,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _formatSize(_fileContent!.length),
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Binary file - preview not available',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isImageExtension(String ext) {
+    return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].contains(ext);
+  }
+
+  bool _isTextExtension(String ext) {
+    return [
+      'txt', 'md', 'json', 'xml', 'yaml', 'yml', 'csv',
+      'dart', 'py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'cs',
+      'go', 'rs', 'swift', 'kt', 'rb', 'php', 'sh', 'bash',
+      'html', 'css', 'scss', 'less', 'sql', 'log', 'ini', 'cfg',
+      'properties', 'env', 'gitignore', 'dockerfile',
+    ].contains(ext);
   }
 
   IconData _getFileIcon(String name) {
@@ -567,13 +715,12 @@ class _MyAppState extends State<MyApp> {
         return Icons.image;
       case 'pdf':
         return Icons.picture_as_pdf;
-      case 'doc':
-      case 'docx':
-        return Icons.description;
       case 'txt':
       case 'md':
       case 'json':
       case 'xml':
+      case 'yaml':
+      case 'yml':
         return Icons.text_snippet;
       case 'dart':
       case 'py':
@@ -582,14 +729,64 @@ class _MyAppState extends State<MyApp> {
       case 'java':
       case 'c':
       case 'cpp':
+      case 'h':
         return Icons.code;
+      case 'html':
+      case 'css':
+        return Icons.web;
       case 'zip':
       case 'rar':
       case 'tar':
       case 'gz':
         return Icons.archive;
+      case 'mp3':
+      case 'wav':
+      case 'flac':
+        return Icons.audio_file;
+      case 'mp4':
+      case 'avi':
+      case 'mkv':
+      case 'mov':
+        return Icons.video_file;
       default:
         return Icons.insert_drive_file;
     }
+  }
+
+  Color _getFileIconColor(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp':
+      case 'webp':
+        return Colors.purple;
+      case 'pdf':
+        return Colors.red;
+      case 'dart':
+        return Colors.blue;
+      case 'py':
+        return Colors.green;
+      case 'js':
+      case 'ts':
+        return Colors.amber.shade700;
+      case 'html':
+        return Colors.orange;
+      case 'json':
+        return Colors.amber;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

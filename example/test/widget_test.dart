@@ -1,27 +1,20 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:rar_example/main.dart';
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('RAR Browser shows empty state', (WidgetTester tester) async {
+    await tester.pumpWidget(const RarBrowserApp());
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is Text && widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+    // Verify the app title is shown
+    expect(find.text('RAR Browser'), findsOneWidget);
+
+    // Verify the empty state message is shown
+    expect(find.text('RAR Archive Browser'), findsOneWidget);
+    expect(find.text('Open a RAR file to browse its contents'), findsOneWidget);
+
+    // Verify the Open RAR button exists
+    expect(find.text('Open RAR'), findsOneWidget);
+    expect(find.text('Open RAR File'), findsOneWidget);
   });
 }
