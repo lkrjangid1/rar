@@ -1,8 +1,9 @@
 # rar
 
-A Flutter plugin for handling RAR archives on **all platforms**: Android, iOS, Linux, macOS, Windows, and Web.
+A Flutter plugin for handling RAR archives on Android, iOS, macOS, and Web.
 
-This plugin allows you to extract RAR files, list their contents, and supports password-protected archives.
+This plugin allows you to extract RAR files, list their contents, and supports
+password-protected archives.
 
 ## Features
 
@@ -11,20 +12,17 @@ This plugin allows you to extract RAR files, list their contents, and supports p
 - Support for password-protected RAR archives
 - Cross-platform support:
   - **Android**: Uses libarchive via native FFI (Supports RAR5)
-  - **iOS**: Uses UnrarKit (Objective-C)
-  - **Linux/macOS/Windows**: Uses libarchive via native FFI
+  - **iOS/macOS**: Uses UnrarKit (Objective-C)
   - **Web**: Uses WASM-based archive library via JS interop
 
 ## Platform Support
 
-| Platform | Extract | List | Password | Notes |
-|----------|---------|------|----------|-------|
-| Android  | ✅      | ✅   | ✅       | Supports RAR5 via FFI |
-| iOS      | ✅      | ✅   | ✅       | |
-| Linux    | ✅      | ✅   | ✅       | |
-| macOS    | ✅      | ✅   | ✅       | |
-| Windows  | ✅      | ✅   | ✅       | |
-| Web      | ✅      | ✅   | ✅       | |
+| Platform | Extract | List | Password |
+|----------|---------|------|----------|
+| Android  | ✅      | ✅   | ✅       |
+| iOS      | ✅      | ✅   | ✅       |
+| macOS    | ✅      | ✅   | ✅       |
+| Web      | ✅      | ✅   | ✅       |
 
 ## Getting Started
 
@@ -34,54 +32,66 @@ Add this to your package's pubspec.yaml file:
 
 ```yaml
 dependencies:
-  rar: ^0.2.1
+  rar: ^latest
 ```
 
 ### Android Setup
 
-The plugin automatically compiles the native RAR library (`libarchive`) using CMake during the build process. This ensures the correct binary is bundled for every architecture (ARM, x86, etc.).
+The plugin automatically compiles the native RAR library (`libarchive`) using
+CMake during the build process. This ensures the correct binary is bundled for
+every architecture (ARM, x86, etc.).
 
-**Requirements:**
-To build the app, the developer must have the following installed in their Android SDK:
+**Requirements:** To build the app, the developer must have the following
+installed in their Android SDK:
 1.  **Android NDK (Side by side)**
 2.  **CMake**
 
 **How to install:**
 1.  Open **Android Studio**.
-2.  Go to **Settings/Preferences** > **Languages & Frameworks** > **Android SDK**.
+2.  Go to **Settings/Preferences** > **Languages & Frameworks** > **Android
+    SDK**.
 3.  Select the **SDK Tools** tab.
 4.  Check **NDK (Side by side)** and **CMake**.
 5.  Click **Apply** to install.
 
 No other manual configuration is needed.
 
-### Desktop Dependencies
+### iOS Setup
 
-For desktop platforms, you need to install libarchive:
+To allow picking RAR files on iOS, add the following to your
+`ios/Runner/Info.plist`:
 
-**Linux (Debian/Ubuntu):**
-```bash
-sudo apt install libarchive-dev
-```
-
-**Linux (Fedora/RHEL):**
-```bash
-sudo dnf install libarchive-devel
-```
-
-**macOS:**
-```bash
-brew install libarchive
-```
-
-**Windows:**
-```bash
-vcpkg install libarchive:x64-windows
+```xml
+<key>UTExportedTypeDeclarations</key>
+<array>
+  <dict>
+    <key>UTTypeConformsTo</key>
+    <array>
+      <string>public.data</string>
+      <string>public.archive</string>
+    </array>
+    <key>UTTypeDescription</key>
+    <string>RAR Archive</string>
+    <key>UTTypeIdentifier</key>
+    <string>com.rarlab.rar-archive</string>
+    <key>UTTypeTagSpecification</key>
+    <dict>
+      <key>public.filename-extension</key>
+      <array>
+        <string>rar</string>
+        <string>rev</string>
+        <string>cbr</string>
+      </array>
+    </dict>
+  </dict>
+</array>
 ```
 
 ### Web Dependencies
 
-The plugin bundles the `libarchive.js` WASM runtime and worker scripts. No manual script tags are required in your `index.html`. The plugin automatically injects the necessary scripts at runtime.
+The plugin bundles the `libarchive.js` WASM runtime and worker scripts. No
+manual script tags are required in your `index.html`. The plugin automatically
+injects the necessary scripts at runtime.
 
 The bundled assets include:
 - `rar_web.js`: The plugin's JavaScript interface
@@ -136,11 +146,14 @@ Future<void> listRarContents() async {
 
 ### Web Platform Notes
 
-On the web platform, file system access is limited. The plugin uses a virtual file system approach:
+On the web platform, file system access is limited. The plugin uses a virtual
+file system approach:
 
-1. When selecting files via a file picker, use `withData: true` to get file bytes
+1. When selecting files via a file picker, use `withData: true` to get file
+   bytes
 2. Store the file data using `RarWeb.storeFileData(path, bytes)`
-3. Extracted files are stored in the virtual file system and can be accessed via `RarWeb.getFileData(path)`
+3. Extracted files are stored in the virtual file system and can be accessed via
+   `RarWeb.getFileData(path)`
 
 ```dart
 import 'package:rar/rar.dart';
@@ -209,18 +222,22 @@ Lists all files in a RAR archive.
 
 Creating RAR archives is **not supported** in this plugin because:
 
-1. RAR is a proprietary format, and creating RAR archives requires proprietary tools
-2. The RAR compression algorithm is licensed and cannot be freely used for compression
+1. RAR is a proprietary format, and creating RAR archives requires proprietary
+   tools
+2. The RAR compression algorithm is licensed and cannot be freely used for
+   compression
 3. Only decompression is allowed under the UnRAR license
 
-For creating archives, consider using the ZIP format instead, which has better native support across all platforms.
+For creating archives, consider using the ZIP format instead, which has better
+native support across all platforms.
 
 ## Error Handling
 
 The plugin returns descriptive error messages for common issues:
 
 - **File not found**: The specified RAR file doesn't exist
-- **Bad password**: Incorrect password or password required for encrypted archive
+- **Bad password**: Incorrect password or password required for encrypted
+  archive
 - **Bad archive**: Corrupt or invalid RAR file
 - **Unknown format**: File is not a valid RAR archive
 - **Bad data**: CRC check failed (data corruption)
@@ -237,48 +254,42 @@ This plugin uses the following libraries:
 |----------|---------|---------|
 | Android | [libarchive](https://libarchive.org/) | BSD |
 | iOS | [UnrarKit](https://github.com/abbeycode/UnrarKit) | BSD |
-| Desktop | [libarchive](https://libarchive.org/) | BSD |
+| macOS | [UnrarKit](https://github.com/abbeycode/UnrarKit) | BSD |
 | Web | [libarchive.js](https://github.com/nicolo-ribaudo/libarchive.js) | MIT |
 
 ## Building Native Libraries
 
-This plugin uses native code for RAR extraction. The build system automatically compiles the native libraries when you build your Flutter app.
+This plugin uses native code for RAR extraction. The build system automatically
+compiles the native libraries when you build your Flutter app.
 
 ### Android (FFI)
 
 Android now uses `libarchive` compiled via CMake and accessed via Dart FFI.
 - **Build System**: CMake (configured in `android/build.gradle`)
 - **Native Code**: `src/rar_native.c`
-- **Dependencies**: `libarchive` is fetched and built automatically during the Gradle build.
+- **Dependencies**: `libarchive` is fetched and built automatically during the
+  Gradle build.
 
 ### Desktop Platforms (FFI)
 
-Desktop platforms use Dart FFI to call native C code compiled with libarchive.
-
-**Linux/macOS/Windows Build Process:**
-1. The native C code is located in `src/rar_native.c`
-2. Build configuration is in platform-specific files:
-   - Linux: `linux/CMakeLists.txt`
-   - macOS: `macos/rar.podspec`
-   - Windows: `windows/CMakeLists.txt`
-3. The native library is automatically built and bundled with your app
-
-**FFI Bindings:**
-
-The FFI bindings in `lib/src/rar_ffi.dart` are hand-written for better control. If you need to regenerate bindings from the C header, you can use ffigen:
+The FFI bindings in `lib/src/rar_ffi.dart` are hand-written for better control.
+If you need to regenerate bindings from the C header, you can use ffigen:
 
 ```bash
 dart run ffigen
 ```
 
-### Mobile Platforms
+### Mobile/Mac Platforms
 
 - **Android**: Uses `libarchive` via FFI (same as Desktop)
-- **iOS**: Uses UnrarKit library (Objective-C/Swift) via MethodChannel
+- **iOS/macOS**: Uses UnrarKit library (Objective-C/Swift) via MethodChannel
 
 ### Web Platform (JS Interop)
 
-The web platform uses JavaScript interop with a WASM-based archive library. The WASM library and worker scripts are bundled with the plugin and loaded dynamically at runtime. No external CDN is used, ensuring the plugin works offline.
+The web platform uses JavaScript interop with a WASM-based archive library. The
+WASM library and worker scripts are bundled with the plugin and loaded
+dynamically at runtime. No external CDN is used, ensuring the plugin works
+offline.
 
 ## Plugin Architecture
 
@@ -311,9 +322,7 @@ Use the test runner script:
 ./test_runner.sh unit
 
 # Run tests for a specific platform
-./test_runner.sh linux
 ./test_runner.sh macos
-./test_runner.sh windows
 ./test_runner.sh web
 
 # Run all desktop tests
@@ -339,7 +348,7 @@ example/
 
 ## Example App
 
-The example app demonstrates all plugin features across platforms:
+The example app (`example/lib/main.dart`) demonstrates all plugin features across platforms. It uses a reusable `FileBrowser` widget (`example/lib/file_browser.dart`) which provides:
 
 - **File picker** for selecting RAR archives
 - **Password support** for encrypted archives
@@ -353,7 +362,7 @@ Run the example:
 
 ```bash
 cd example
-flutter run -d linux    # or macos, windows, chrome, etc.
+flutter run -d macos    # or chrome, etc.
 ```
 
 ## Contributing
@@ -362,4 +371,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Issues
 
-If you find a bug or want to request a new feature, please open an issue on [GitHub](https://github.com/lkrjangid1/rar/issues).
+If you find a bug or want to request a new feature, please open an issue on
+[GitHub](https://github.com/lkrjangid1/rar/issues).

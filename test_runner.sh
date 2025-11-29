@@ -57,38 +57,6 @@ run_unit_tests() {
     print_success "Unit tests passed"
 }
 
-run_linux_tests() {
-    print_header "Running Linux Integration Tests"
-
-    if [[ "$OSTYPE" != "linux-gnu"* ]]; then
-        print_warning "Skipping Linux tests (not on Linux)"
-        return 0
-    fi
-
-    # Check for libarchive
-    if ! pkg-config --exists libarchive; then
-        print_warning "libarchive not found. Install with: sudo apt install libarchive-dev"
-    fi
-
-    echo "Building Linux example app..."
-    cd example
-    flutter build linux || {
-        print_error "Linux build failed"
-        cd ..
-        return 1
-    }
-
-    echo "Running Linux integration tests..."
-    flutter test integration_test/rar_integration_test.dart -d linux || {
-        print_error "Linux integration tests failed"
-        cd ..
-        return 1
-    }
-
-    cd ..
-    print_success "Linux tests passed"
-}
-
 run_macos_tests() {
     print_header "Running macOS Integration Tests"
 
@@ -119,33 +87,6 @@ run_macos_tests() {
 
     cd ..
     print_success "macOS tests passed"
-}
-
-run_windows_tests() {
-    print_header "Running Windows Integration Tests"
-
-    if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "cygwin" && "$OSTYPE" != "win32" ]]; then
-        print_warning "Skipping Windows tests (not on Windows)"
-        return 0
-    fi
-
-    echo "Building Windows example app..."
-    cd example
-    flutter build windows || {
-        print_error "Windows build failed"
-        cd ..
-        return 1
-    }
-
-    echo "Running Windows integration tests..."
-    flutter test integration_test/rar_integration_test.dart -d windows || {
-        print_error "Windows integration tests failed"
-        cd ..
-        return 1
-    }
-
-    cd ..
-    print_success "Windows tests passed"
 }
 
 run_android_tests() {
@@ -215,19 +156,17 @@ show_usage() {
     echo ""
     echo "Platforms:"
     echo "  unit      - Run unit tests only"
-    echo "  linux     - Run Linux desktop tests"
     echo "  macos     - Run macOS desktop tests"
-    echo "  windows   - Run Windows desktop tests"
     echo "  android   - Run Android tests"
     echo "  ios       - Run iOS tests"
     echo "  web       - Run Web tests"
-    echo "  desktop   - Run all desktop tests (linux, macos, windows)"
+    echo "  desktop   - Run desktop tests (macos)"
     echo "  mobile    - Run all mobile tests (android, ios)"
     echo "  all       - Run all tests"
     echo ""
     echo "Examples:"
     echo "  $0 unit      # Run unit tests"
-    echo "  $0 linux     # Run Linux integration tests"
+    echo "  $0 macos     # Run macOS integration tests"
     echo "  $0 all       # Run all tests"
 }
 
@@ -241,17 +180,9 @@ case "$1" in
     unit)
         run_unit_tests
         ;;
-    linux)
-        run_unit_tests
-        run_linux_tests
-        ;;
     macos)
         run_unit_tests
         run_macos_tests
-        ;;
-    windows)
-        run_unit_tests
-        run_windows_tests
         ;;
     android)
         run_unit_tests
@@ -267,9 +198,7 @@ case "$1" in
         ;;
     desktop)
         run_unit_tests
-        run_linux_tests
         run_macos_tests
-        run_windows_tests
         ;;
     mobile)
         run_unit_tests
@@ -278,9 +207,7 @@ case "$1" in
         ;;
     all)
         run_unit_tests
-        run_linux_tests
         run_macos_tests
-        run_windows_tests
         run_android_tests
         run_ios_tests
         run_web_tests

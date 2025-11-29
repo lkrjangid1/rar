@@ -107,7 +107,11 @@ class FileBrowser extends StatefulWidget {
     this.onLoadContent,
     this.title = 'File Browser',
     this.rarVersion,
+    this.warning,
   });
+
+  /// Warning message to display (e.g. if listing failed but extraction worked).
+  final String? warning;
 
   @override
   State<FileBrowser> createState() => _FileBrowserState();
@@ -154,6 +158,27 @@ class _FileBrowserState extends State<FileBrowser> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.warning != null)
+            Container(
+              width: double.infinity,
+              color: Colors.amber.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.warning!,
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Header
           Container(
             padding: const EdgeInsets.all(12),
@@ -591,18 +616,22 @@ class _FileBrowserState extends State<FileBrowser> {
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 4.0,
-      child: Center(
+      child: SizedBox(
+        width: double.infinity,
+        height: double.infinity,
         child: Image.memory(
           content,
           fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.broken_image, size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
-                Text('Failed to load image: $error'),
-              ],
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.broken_image, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text('Failed to load image: $error'),
+                ],
+              ),
             );
           },
         ),
