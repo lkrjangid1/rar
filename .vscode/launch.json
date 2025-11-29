@@ -2,26 +2,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "example",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "cwd": "example"
+        },
+        {
             "name": "example (web)",
             "request": "launch",
             "type": "dart",
             "deviceId": "chrome",
-            "program": "lib/main.dart",
-            "cwd": "example"
-        },
-        {
-            "name": "example (android)",
-            "request": "launch",
-            "type": "dart",
-            "deviceId": "android",
-            "program": "lib/main.dart",
-            "cwd": "example"
-        },
-        {
-            "name": "example (ios)",
-            "request": "launch",
-            "type": "dart",
-            "deviceId": "ios",
             "program": "lib/main.dart",
             "cwd": "example"
         },

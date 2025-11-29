@@ -18,13 +18,10 @@
 (function () {
   'use strict';
 
-  // Bump this to force cache-busting/debug visibility
-  const BUILD_TAG = 'debug-v4';
-  const LOG_PREFIX = `[RAR Web ${BUILD_TAG}]`;
-  const debug = (...args) => console.log(LOG_PREFIX, ...args);
-  const warn = (...args) => console.warn(LOG_PREFIX, ...args);
-  const err = (...args) => console.error(LOG_PREFIX, ...args);
-  console.log(`${LOG_PREFIX} script loaded`);
+  // Bump this to force cache-busting if needed
+  const BUILD_TAG = 'v4';
+  const warn = (...args) => console.warn('[RAR Web]', ...args);
+  const err = (...args) => console.error('[RAR Web]', ...args);
 
   // WASM module state (libarchive.js only)
   let wasmModule = null;
@@ -41,7 +38,6 @@
     // Must be called before any other operations
     async init() {
       if (isInitialized) {
-        debug('Init skipped - already initialized');
         return true;
       }
 
@@ -50,9 +46,6 @@
         // We use a CDN-hosted version or local file depending on configuration
         wasmModule = await loadArchiveModule();
         isInitialized = true;
-        debug('RAR WASM library initialized successfully', { module: wasmModule && (wasmModule.open ? 'libarchive' : 'minimal') });
-        // Expose debug helpers for inspection
-        window.RarWebDebug = { summarizeArchive };
         return true;
       } catch (error) {
         err('Failed to initialize RAR WASM library:', error);
@@ -75,9 +68,6 @@
 
       try {
         const archive = await openArchive(data, password);
-        debug('Archive opened (list)', summarizeArchive(archive));
-        // Expose for manual inspection
-        window.__rarLastArchive = archive;
 
         const entries = await listArchiveEntries(archive);
         const files = entries
@@ -118,8 +108,6 @@
 
       try {
         const archive = await openArchive(data, password);
-        debug('Archive opened (extract)', summarizeArchive(archive));
-        window.__rarLastArchive = archive;
 
         const entries = await extractArchiveEntries(archive);
 
@@ -146,13 +134,11 @@
   // Load the archive WASM module (libarchive.js only, no fallbacks)
   async function loadArchiveModule() {
     const localBases = getLocalBaseUrls();
-    debug('Local base candidates', localBases);
     let lastError;
     for (const base of localBases) {
       try {
         const archive = await tryLoadArchiveModuleFromBase(base);
         if (archive) {
-          debug('Loaded libarchive from local base', base);
           return archive;
         }
       } catch (e) {
@@ -170,7 +156,6 @@
     }
 
     const summary = summarizeArchive(archive);
-    debug('Listing archive entries', summary);
 
     // Direct worker access (bypassing the wrapper's tree construction)
     if (archive.client && typeof archive.client.listFiles === 'function') {
@@ -210,17 +195,10 @@
     }
 
     const summary = summarizeArchive(archive);
-    debug('Extracting archive entries', summary);
-
     // Direct worker access (bypassing the wrapper's tree construction)
     if (archive.client && typeof archive.client.extractFiles === 'function') {
       try {
         const files = await archive.client.extractFiles();
-        debug('archive.client.extractFiles returned', {
-          type: typeof files,
-          isArray: Array.isArray(files),
-          length: files && files.length
-        });
         const normalized = await normalizeFileResults(files);
         if (normalized) {
           return normalized;
@@ -233,13 +211,6 @@
     // Preferred: libarchive.js extractFiles (includes fileData)
     if (typeof archive.extractFiles === 'function') {
       const files = await archive.extractFiles();
-      debug('extractFiles returned', {
-        type: typeof files,
-        isArray: Array.isArray(files),
-        length: files && typeof files.length === 'number' ? files.length : undefined,
-        ctor: files && files.constructor && files.constructor.name,
-        firstKeys: files && files[0] ? Object.keys(files[0]) : []
-      });
       const normalized = await normalizeFileResults(files);
       if (normalized) {
         return normalized;
@@ -358,10 +329,8 @@
     const wasmUrl = `${normalizedBase}libarchive.wasm`;
 
     try {
-      debug('Attempting load from base', normalizedBase);
       if (typeof Archive === 'undefined') {
         await importArchiveLibrary([scriptUrl]);
-        debug('Archive module imported', { scriptUrl });
       }
 
       if (typeof Archive !== 'undefined') {
@@ -393,7 +362,6 @@
       wasmBinaryFile: wasmUrl
     };
 
-    debug('Calling Archive.init', options);
     return Archive.init(options);
   }
 
@@ -411,7 +379,6 @@
     for (const url of urls) {
       if (!url) continue;
       try {
-        debug('Importing archive module', url);
         const mod = await import(/* webpackIgnore: true */ url);
         const archiveExport = mod.Archive || mod.default;
         if (!archiveExport) {
@@ -827,4 +794,5 @@
       this.entries = [];
     }
   }
+
 })();

@@ -45,6 +45,18 @@ android {
 
     defaultConfig {
         minSdk = 21
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            version "3.22.1"
+        }
     }
 
     dependencies {

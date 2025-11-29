@@ -4,7 +4,12 @@
 // This defines the contract that all platform implementations must follow.
 // Uses the plugin_platform_interface package for proper platform registration.
 
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+import 'src/rar_ffi.dart' if (dart.library.js_interop) 'src/rar_ffi_stub.dart';
 import 'src/rar_method_channel.dart';
 
 /// The interface that implementations of rar must implement.
@@ -20,11 +25,18 @@ abstract class RarPlatform extends PlatformInterface {
 
   static final Object _token = Object();
 
-  static RarPlatform _instance = RarMethodChannel();
+  static RarPlatform _instance = _createDefaultInstance();
+
+  static RarPlatform _createDefaultInstance() {
+    if (!kIsWeb && Platform.isAndroid) {
+      return RarFfi();
+    }
+    return RarMethodChannel();
+  }
 
   /// The default instance of [RarPlatform] to use.
   ///
-  /// Defaults to [RarMethodChannel] which uses method channels for mobile platforms.
+  /// Defaults to [RarMethodChannel] for iOS/macOS and [RarFfi] for Android.
   static RarPlatform get instance => _instance;
 
   /// Platform-specific implementations should set this with their own

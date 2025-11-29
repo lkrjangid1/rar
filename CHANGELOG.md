@@ -1,3 +1,7 @@
+## 0.3.0
+
+- Added support for macOS and the web
+
 ## 0.2.1
 
 ### Testing

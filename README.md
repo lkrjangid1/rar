@@ -10,21 +10,21 @@ This plugin allows you to extract RAR files, list their contents, and supports p
 - List contents of RAR files
 - Support for password-protected RAR archives
 - Cross-platform support:
-  - **Android**: Uses JUnRar (Java)
+  - **Android**: Uses libarchive via native FFI (Supports RAR5)
   - **iOS**: Uses UnrarKit (Objective-C)
   - **Linux/macOS/Windows**: Uses libarchive via native FFI
   - **Web**: Uses WASM-based archive library via JS interop
 
 ## Platform Support
 
-| Platform | Extract | List | Password |
-|----------|---------|------|----------|
-| Android  | ✅      | ✅   | ✅       |
-| iOS      | ✅      | ✅   | ✅       |
-| Linux    | ✅      | ✅   | ✅       |
-| macOS    | ✅      | ✅   | ✅       |
-| Windows  | ✅      | ✅   | ✅       |
-| Web      | ✅      | ✅   | ✅       |
+| Platform | Extract | List | Password | Notes |
+|----------|---------|------|----------|-------|
+| Android  | ✅      | ✅   | ✅       | Supports RAR5 via FFI |
+| iOS      | ✅      | ✅   | ✅       | |
+| Linux    | ✅      | ✅   | ✅       | |
+| macOS    | ✅      | ✅   | ✅       | |
+| Windows  | ✅      | ✅   | ✅       | |
+| Web      | ✅      | ✅   | ✅       | |
 
 ## Getting Started
 
@@ -36,6 +36,24 @@ Add this to your package's pubspec.yaml file:
 dependencies:
   rar: ^0.2.1
 ```
+
+### Android Setup
+
+The plugin automatically compiles the native RAR library (`libarchive`) using CMake during the build process. This ensures the correct binary is bundled for every architecture (ARM, x86, etc.).
+
+**Requirements:**
+To build the app, the developer must have the following installed in their Android SDK:
+1.  **Android NDK (Side by side)**
+2.  **CMake**
+
+**How to install:**
+1.  Open **Android Studio**.
+2.  Go to **Settings/Preferences** > **Languages & Frameworks** > **Android SDK**.
+3.  Select the **SDK Tools** tab.
+4.  Check **NDK (Side by side)** and **CMake**.
+5.  Click **Apply** to install.
+
+No other manual configuration is needed.
 
 ### Desktop Dependencies
 
@@ -63,13 +81,13 @@ vcpkg install libarchive:x64-windows
 
 ### Web Dependencies
 
-The plugin ships the `libarchive.js` WASM runtime so the web demo works even without network access. Add the loader script to your `web/index.html` before `flutter_bootstrap.js`:
+The plugin bundles the `libarchive.js` WASM runtime and worker scripts. No manual script tags are required in your `index.html`. The plugin automatically injects the necessary scripts at runtime.
 
-```html
-<script src="assets/packages/rar/rar_web.js"></script>
-```
-
-The script will first try the bundled WASM/worker assets (`libarchive.js`, `worker-bundle.js`), then fall back to a CDN only if the local files are missing.
+The bundled assets include:
+- `rar_web.js`: The plugin's JavaScript interface
+- `libarchive.js`: The WASM loader
+- `libarchive.wasm`: The compiled libarchive library
+- `worker-bundle.js`: The web worker for background processing
 
 ## Usage
 
@@ -105,6 +123,7 @@ Future<void> listRarContents() async {
   );
 
   if (result['success']) {
+    print('RAR Version: ${result['rarVersion']}'); // e.g., "RAR4" or "RAR5"
     print('Files in archive:');
     for (final file in result['files']) {
       print('- $file');
@@ -184,6 +203,7 @@ Lists all files in a RAR archive.
 - `success` (bool): Whether the listing was successful
 - `message` (String): Status message or error description
 - `files` (List<String>): List of file names in the archive
+- `rarVersion` (String?): Detected RAR version ("RAR4", "RAR5", or "Unknown")
 
 ## Note on Creating RAR Archives
 
@@ -215,7 +235,7 @@ This plugin uses the following libraries:
 
 | Platform | Library | License |
 |----------|---------|---------|
-| Android | [JUnRar](https://github.com/junrar/junrar) | LGPL-3.0 |
+| Android | [libarchive](https://libarchive.org/) | BSD |
 | iOS | [UnrarKit](https://github.com/abbeycode/UnrarKit) | BSD |
 | Desktop | [libarchive](https://libarchive.org/) | BSD |
 | Web | [libarchive.js](https://github.com/nicolo-ribaudo/libarchive.js) | MIT |
@@ -223,6 +243,13 @@ This plugin uses the following libraries:
 ## Building Native Libraries
 
 This plugin uses native code for RAR extraction. The build system automatically compiles the native libraries when you build your Flutter app.
+
+### Android (FFI)
+
+Android now uses `libarchive` compiled via CMake and accessed via Dart FFI.
+- **Build System**: CMake (configured in `android/build.gradle`)
+- **Native Code**: `src/rar_native.c`
+- **Dependencies**: `libarchive` is fetched and built automatically during the Gradle build.
 
 ### Desktop Platforms (FFI)
 
@@ -238,21 +265,20 @@ Desktop platforms use Dart FFI to call native C code compiled with libarchive.
 
 **FFI Bindings:**
 
-The FFI bindings in `lib/src/rar_desktop_ffi.dart` are hand-written for better control. If you need to regenerate bindings from the C header, you can use ffigen:
+The FFI bindings in `lib/src/rar_ffi.dart` are hand-written for better control. If you need to regenerate bindings from the C header, you can use ffigen:
 
 ```bash
 dart run ffigen
 ```
 
-### Mobile Platforms (MethodChannel)
+### Mobile Platforms
 
-Mobile platforms use MethodChannel to communicate with native code:
-- **Android**: JUnRar library (Java/Kotlin)
-- **iOS**: UnrarKit library (Objective-C/Swift)
+- **Android**: Uses `libarchive` via FFI (same as Desktop)
+- **iOS**: Uses UnrarKit library (Objective-C/Swift) via MethodChannel
 
 ### Web Platform (JS Interop)
 
-The web platform uses JavaScript interop with a WASM-based archive library. The WASM library is loaded from CDN at runtime.
+The web platform uses JavaScript interop with a WASM-based archive library. The WASM library and worker scripts are bundled with the plugin and loaded dynamically at runtime. No external CDN is used, ensuring the plugin works offline.
 
 ## Plugin Architecture
 
