@@ -112,9 +112,7 @@ void main() {
         return;
       }
 
-      final result = await Rar.listRarContents(
-        rarFilePath: rarFilePath,
-      );
+      final result = await Rar.listRarContents(rarFilePath: rarFilePath);
 
       debugPrint('List result: $result');
 
@@ -130,7 +128,9 @@ void main() {
         expect(files, isNotEmpty);
       } else {
         // Log error but don't fail - native library might not be installed
-        debugPrint('List failed (expected if native library not installed): ${result['message']}');
+        debugPrint(
+          'List failed (expected if native library not installed): ${result['message']}',
+        );
       }
     });
 
@@ -178,7 +178,9 @@ void main() {
         debugPrint('Extracted files: ${entities.map((e) => e.path).toList()}');
         expect(entities, isNotEmpty);
       } else {
-        debugPrint('Extract failed (expected if native library not installed): ${result['message']}');
+        debugPrint(
+          'Extract failed (expected if native library not installed): ${result['message']}',
+        );
       }
     });
 
@@ -204,7 +206,10 @@ void main() {
 
       debugPrint('Create result: $result');
       expect(result['success'], false);
-      expect(result['message'].toString().toLowerCase(), contains('not supported'));
+      expect(
+        result['message'].toString().toLowerCase(),
+        contains('not supported'),
+      );
     });
   });
 
@@ -217,9 +222,7 @@ void main() {
       final invalidFile = File(invalidRarPath);
       await invalidFile.writeAsBytes([0x00, 0x01, 0x02, 0x03]);
 
-      final result = await Rar.listRarContents(
-        rarFilePath: invalidRarPath,
-      );
+      final result = await Rar.listRarContents(rarFilePath: invalidRarPath);
 
       debugPrint('Invalid RAR result: $result');
       expect(result['success'], false);
@@ -232,9 +235,7 @@ void main() {
       final emptyFile = File(emptyRarPath);
       await emptyFile.writeAsBytes([]);
 
-      final result = await Rar.listRarContents(
-        rarFilePath: emptyRarPath,
-      );
+      final result = await Rar.listRarContents(rarFilePath: emptyRarPath);
 
       debugPrint('Empty file result: $result');
       expect(result['success'], false);

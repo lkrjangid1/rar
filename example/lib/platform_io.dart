@@ -59,8 +59,7 @@ Future<List<String>> listDirectoryContents(String path) async {
   return entities.map((e) {
     final name = e.path.split(Platform.pathSeparator).last;
     return e is Directory ? '$name/' : name;
-  }).toList()
-    ..sort();
+  }).toList()..sort();
 }
 
 /// Load file content as bytes.

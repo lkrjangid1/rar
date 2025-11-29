@@ -18,10 +18,13 @@
 (function() {
   'use strict';
 
-  const LOG_PREFIX = '[RAR Web]';
-  const debug = (...args) => console.info(LOG_PREFIX, ...args);
+  // Bump this to force cache-busting/debug visibility
+  const BUILD_TAG = 'debug-v4';
+  const LOG_PREFIX = `[RAR Web ${BUILD_TAG}]`;
+  const debug = (...args) => console.log(LOG_PREFIX, ...args);
   const warn = (...args) => console.warn(LOG_PREFIX, ...args);
   const err = (...args) => console.error(LOG_PREFIX, ...args);
+  console.log(`${LOG_PREFIX} script loaded`);
 
   // WASM module state
   let wasmModule = null;
@@ -48,6 +51,8 @@
         wasmModule = await loadArchiveModule();
         isInitialized = true;
         debug('RAR WASM library initialized successfully', { module: wasmModule && (wasmModule.open ? 'libarchive' : 'minimal') });
+        // Expose debug helpers for inspection
+        window.RarWebDebug = { summarizeArchive };
         return true;
       } catch (error) {
         err('Failed to initialize RAR WASM library:', error);
@@ -70,9 +75,13 @@
 
       try {
         const archive = await openArchive(data, password);
+        debug('Archive opened (list)', summarizeArchive(archive));
+        // Expose for manual inspection
+        window.__rarLastArchive = archive;
+
         const entries = await listArchiveEntries(archive);
         const files = entries
-          .map((entry) => entry.path || entry.name || entry.fileName || '')
+          .map((entry) => entry && (entry.path || entry.name || entry.fileName || ''))
           .filter((p) => !!p);
 
         if (typeof archive.close === 'function') {
@@ -85,6 +94,7 @@
           files: files
         };
       } catch (error) {
+        err('listFromBytes failed', error);
         return {
           success: false,
           message: getErrorMessage(error),
@@ -108,6 +118,9 @@
 
       try {
         const archive = await openArchive(data, password);
+        debug('Archive opened (extract)', summarizeArchive(archive));
+        window.__rarLastArchive = archive;
+
         const entries = await extractArchiveEntries(archive);
 
         if (typeof archive.close === 'function') {
@@ -120,6 +133,7 @@
           entries: entries
         };
       } catch (error) {
+        err('extractFromBytes failed', error);
         return {
           success: false,
           message: getErrorMessage(error),
@@ -180,14 +194,23 @@
       throw new Error('Archive instance is null');
     }
 
-    debug('Listing archive entries', { keys: Object.keys(archive || {}), hasEntries: !!archive.entries });
+    const summary = summarizeArchive(archive);
+    debug('Listing archive entries', summary);
 
     if (typeof archive.listFiles === 'function') {
-      return await archive.listFiles();
+      const files = await archive.listFiles();
+      if (!Array.isArray(files)) {
+        throw new Error('archive.listFiles returned non-array');
+      }
+      return files;
     }
 
     if (typeof archive.getFilesArray === 'function') {
-      return await archive.getFilesArray();
+      const files = await archive.getFilesArray();
+      if (!Array.isArray(files)) {
+        throw new Error('archive.getFilesArray returned non-array');
+      }
+      return files;
     }
 
     if (archive.entries) {
@@ -211,16 +234,30 @@
       throw new Error('Archive instance is null');
     }
 
-    debug('Extracting archive entries', { keys: Object.keys(archive || {}), hasEntries: !!archive.entries });
+    const summary = summarizeArchive(archive);
+    debug('Extracting archive entries', summary);
 
     // Preferred: libarchive.js extractFiles (includes fileData)
     if (typeof archive.extractFiles === 'function') {
       const files = await archive.extractFiles();
-      return files.map((f) => ({
-        name: f.path || f.fileName || f.name || '',
-        data: f.fileData ? new Uint8Array(f.fileData) : new Uint8Array(),
-        size: f.fileData ? f.fileData.byteLength : f.size || 0,
-      }));
+      debug('extractFiles returned', files);
+      const normalized = normalizeFileResults(files);
+      if (!normalized) {
+        warn('extractFiles returned unexpected shape, trying getFilesArray');
+      } else {
+        return normalized;
+      }
+    }
+
+    // Try getFilesArray with data
+    if (typeof archive.getFilesArray === 'function') {
+      const files = await archive.getFilesArray();
+      debug('getFilesArray returned', files);
+      const normalized = await normalizeFilesArrayWithData(files);
+      if (!normalized) {
+        throw new Error('getFilesArray returned unexpected shape');
+      }
+      return normalized;
     }
 
     // Minimal parser path (entries with extract())
@@ -261,6 +298,79 @@
       }
     }
     return null;
+  }
+
+  function normalizeFileResults(files) {
+    if (!files) return null;
+
+    // If already an array-like structure
+    const arr = Array.isArray(files) || typeof files.length === 'number'
+      ? Array.from(files)
+      : null;
+
+    const source = arr || (files.files && Array.isArray(files.files) && files.files) || null;
+    if (!source) return null;
+
+    return source
+      .filter(Boolean)
+      .map((f) => {
+        const data = f.fileData || f.data || f.buffer || f.bytes;
+        const uint8 = data ? new Uint8Array(data) : new Uint8Array();
+        return {
+          name: f.path || f.fileName || f.name || '',
+          data: uint8,
+          size: uint8.byteLength || f.size || 0,
+        };
+      });
+  }
+
+  async function normalizeFilesArrayWithData(files) {
+    if (!files) return null;
+    if (!Array.isArray(files) && typeof files.length !== 'number') {
+      return null;
+    }
+    const arr = Array.from(files);
+    const result = [];
+    for (const f of arr) {
+      if (!f) continue;
+      let data = f.fileData || f.data || f.buffer || f.bytes;
+      if (!data && f.file && typeof f.file.arrayBuffer === 'function') {
+        const buf = await f.file.arrayBuffer();
+        data = new Uint8Array(buf);
+      } else if (!data && typeof f.arrayBuffer === 'function') {
+        const buf = await f.arrayBuffer();
+        data = new Uint8Array(buf);
+      }
+      const uint8 = data ? new Uint8Array(data) : new Uint8Array();
+      result.push({
+        name: f.path || f.fileName || f.name || '',
+        data: uint8,
+        size: uint8.byteLength || f.size || 0,
+      });
+    }
+    return result;
+  }
+
+  function summarizeArchive(archive) {
+    if (!archive) return { nullArchive: true };
+    const entries = archive.entries;
+    const hasIterator = entries && typeof entries[Symbol.iterator] === 'function';
+    const isArray = Array.isArray(entries);
+    const length = entries && typeof entries.length === 'number' ? entries.length : undefined;
+    const ctor = archive && archive.constructor && archive.constructor.name;
+    return {
+      ctor,
+      keys: Object.keys(archive || {}),
+      hasEntries: !!entries,
+      entriesType: typeof entries,
+      entriesHasIterator: hasIterator,
+      entriesIsArray: isArray,
+      entriesLength: length,
+      listFilesFn: typeof archive.listFiles,
+      getFilesArrayFn: typeof archive.getFilesArray,
+      extractFilesFn: typeof archive.extractFiles,
+      closeFn: typeof archive.close
+    };
   }
 
   // Determine possible base URLs where libarchive assets might live

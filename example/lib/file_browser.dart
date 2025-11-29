@@ -58,11 +58,7 @@ class FileNode {
           // If it's the last part and ends with '/', it's a directory
           final isDir = !isLast || path.endsWith('/');
 
-          child = FileNode(
-            name: part,
-            path: currentPath,
-            isDirectory: isDir,
-          );
+          child = FileNode(name: part, path: currentPath, isDirectory: isDir);
           current.children.add(child);
         }
 
@@ -102,11 +98,15 @@ class FileBrowser extends StatefulWidget {
   /// Title to display in the app bar.
   final String title;
 
+  /// RAR version string to display (e.g., RAR4, RAR5).
+  final String? rarVersion;
+
   const FileBrowser({
     super.key,
     required this.root,
     this.onLoadContent,
     this.title = 'File Browser',
+    this.rarVersion,
   });
 
   @override
@@ -128,15 +128,10 @@ class _FileBrowserState extends State<FileBrowser> {
       return Row(
         children: [
           // File tree
-          SizedBox(
-            width: 300,
-            child: _buildFileTree(),
-          ),
+          SizedBox(width: 300, child: _buildFileTree()),
           const VerticalDivider(width: 1),
           // Content viewer
-          Expanded(
-            child: _buildContentViewer(),
-          ),
+          Expanded(child: _buildContentViewer()),
         ],
       );
     } else {
@@ -144,16 +139,10 @@ class _FileBrowserState extends State<FileBrowser> {
       return Column(
         children: [
           // File tree (collapsible)
-          Expanded(
-            flex: 2,
-            child: _buildFileTree(),
-          ),
+          Expanded(flex: 2, child: _buildFileTree()),
           const Divider(height: 1),
           // Content viewer
-          Expanded(
-            flex: 3,
-            child: _buildContentViewer(),
-          ),
+          Expanded(flex: 3, child: _buildContentViewer()),
         ],
       );
     }
@@ -173,13 +162,7 @@ class _FileBrowserState extends State<FileBrowser> {
               children: [
                 const Icon(Icons.folder_open),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.root.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Expanded(child: _buildHeaderTitle(context)),
                 Text(
                   '${_countFiles(widget.root)} files',
                   style: Theme.of(context).textTheme.bodySmall,
@@ -211,6 +194,23 @@ class _FileBrowserState extends State<FileBrowser> {
       }
     }
     return count;
+  }
+
+  Widget _buildHeaderTitle(BuildContext context) {
+    final theme = Theme.of(context);
+    final version = widget.rarVersion;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.root.name,
+          style: theme.textTheme.titleMedium,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (version != null && version.isNotEmpty)
+          Text(version, style: theme.textTheme.bodySmall),
+      ],
+    );
   }
 
   Widget _buildTreeNode(FileNode node, int depth) {
@@ -260,8 +260,9 @@ class _FileBrowserState extends State<FileBrowser> {
                   child: Text(
                     node.name,
                     style: TextStyle(
-                      fontWeight:
-                          node.isDirectory ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: node.isDirectory
+                          ? FontWeight.w500
+                          : FontWeight.normal,
                       fontFamily: 'monospace',
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -453,9 +454,7 @@ class _FileBrowserState extends State<FileBrowser> {
             ),
           ),
           // Content
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
@@ -519,9 +518,7 @@ class _FileBrowserState extends State<FileBrowser> {
     }
 
     if (_fileContent == null) {
-      return const Center(
-        child: Text('No content available'),
-      );
+      return const Center(child: Text('No content available'));
     }
 
     // Determine content type and display accordingly
@@ -551,11 +548,42 @@ class _FileBrowserState extends State<FileBrowser> {
 
   bool _isTextExtension(String ext) {
     return [
-      'txt', 'md', 'json', 'xml', 'yaml', 'yml', 'csv',
-      'dart', 'py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'cs',
-      'go', 'rs', 'swift', 'kt', 'rb', 'php', 'sh', 'bash',
-      'html', 'css', 'scss', 'less', 'sql', 'log', 'ini', 'cfg',
-      'properties', 'env', 'gitignore', 'dockerfile',
+      'txt',
+      'md',
+      'json',
+      'xml',
+      'yaml',
+      'yml',
+      'csv',
+      'dart',
+      'py',
+      'js',
+      'ts',
+      'java',
+      'c',
+      'cpp',
+      'h',
+      'cs',
+      'go',
+      'rs',
+      'swift',
+      'kt',
+      'rb',
+      'php',
+      'sh',
+      'bash',
+      'html',
+      'css',
+      'scss',
+      'less',
+      'sql',
+      'log',
+      'ini',
+      'cfg',
+      'properties',
+      'env',
+      'gitignore',
+      'dockerfile',
     ].contains(ext);
   }
 
@@ -609,7 +637,11 @@ class _FileBrowserState extends State<FileBrowser> {
     const bytesPerLine = 16;
     const maxLines = 100; // Limit for performance
 
-    for (var i = 0; i < content.length && i < maxLines * bytesPerLine; i += bytesPerLine) {
+    for (
+      var i = 0;
+      i < content.length && i < maxLines * bytesPerLine;
+      i += bytesPerLine
+    ) {
       final end = (i + bytesPerLine).clamp(0, content.length);
       final bytes = content.sublist(i, end);
 
@@ -630,24 +662,25 @@ class _FileBrowserState extends State<FileBrowser> {
         return '.';
       }).join();
 
-      lines.add(Text(
-        '$address  $hexPadded  $ascii',
-        style: const TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 12,
+      lines.add(
+        Text(
+          '$address  $hexPadded  $ascii',
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
         ),
-      ));
+      );
     }
 
     if (content.length > maxLines * bytesPerLine) {
       lines.add(const SizedBox(height: 16));
-      lines.add(Text(
-        '... ${content.length - maxLines * bytesPerLine} more bytes',
-        style: TextStyle(
-          fontStyle: FontStyle.italic,
-          color: Colors.grey.shade600,
+      lines.add(
+        Text(
+          '... ${content.length - maxLines * bytesPerLine} more bytes',
+          style: TextStyle(
+            fontStyle: FontStyle.italic,
+            color: Colors.grey.shade600,
+          ),
         ),
-      ));
+      );
     }
 
     return SingleChildScrollView(
@@ -702,11 +735,7 @@ class FileBrowserPage extends StatelessWidget {
         title: Text(title),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: FileBrowser(
-        root: root,
-        onLoadContent: onLoadContent,
-        title: title,
-      ),
+      body: FileBrowser(root: root, onLoadContent: onLoadContent, title: title),
     );
   }
 }

@@ -58,9 +58,11 @@ class _RarBrowserPageState extends State<RarBrowserPage>
   bool _isLoading = false;
   bool _isLoadingContent = false;
   String? _error;
+  String? _warning;
   String? _archiveName;
   String? _extractPath;
   String? _password;
+  String? _rarVersion;
   late TabController _tabController;
 
   @override
@@ -80,6 +82,8 @@ class _RarBrowserPageState extends State<RarBrowserPage>
     setState(() {
       _isLoading = true;
       _error = null;
+      _warning = null;
+      _rarVersion = null;
     });
 
     final result = await FilePicker.platform.pickFiles(
@@ -151,6 +155,8 @@ class _RarBrowserPageState extends State<RarBrowserPage>
           _fileContent = null;
           _extractPath = null; // Can't load content without extraction
           _isLoading = false;
+          _warning = extractResult['message']?.toString();
+          _rarVersion = listResult['rarVersion'] as String?;
         });
         return;
       }
@@ -174,6 +180,12 @@ class _RarBrowserPageState extends State<RarBrowserPage>
     List<String> archiveFiles;
     if (listResult['success'] == true) {
       archiveFiles = List<String>.from(listResult['files'] as List);
+      _rarVersion = listResult['rarVersion'] as String?;
+      if (archiveFiles.isEmpty && extractResult['success'] != true) {
+        _warning = extractResult['message']?.toString() ??
+            listResult['message']?.toString() ??
+            'No files were listed from the archive.';
+      }
     } else {
       archiveFiles = files;
     }
@@ -183,6 +195,8 @@ class _RarBrowserPageState extends State<RarBrowserPage>
       _selectedFile = null;
       _fileContent = null;
       _isLoading = false;
+      _rarVersion = _rarVersion ?? listResult['rarVersion'] as String?;
+      _warning = _warning ?? listResult['message']?.toString();
     });
   }
 
@@ -335,9 +349,9 @@ class _RarBrowserPageState extends State<RarBrowserPage>
           const SizedBox(height: 24),
           Text(
             'RAR Archive Browser',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.grey.shade600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -363,14 +377,9 @@ class _RarBrowserPageState extends State<RarBrowserPage>
   Widget _buildWideLayout() {
     return Row(
       children: [
-        SizedBox(
-          width: 320,
-          child: _buildFilesPane(),
-        ),
+        SizedBox(width: 320, child: _buildFilesPane()),
         const VerticalDivider(width: 1),
-        Expanded(
-          child: _buildContentPane(),
-        ),
+        Expanded(child: _buildContentPane()),
       ],
     );
   }
@@ -388,10 +397,7 @@ class _RarBrowserPageState extends State<RarBrowserPage>
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [
-              _buildFilesPane(),
-              _buildContentPane(),
-            ],
+            children: [_buildFilesPane(), _buildContentPane()],
           ),
         ),
       ],
@@ -404,6 +410,27 @@ class _RarBrowserPageState extends State<RarBrowserPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_warning != null)
+          Container(
+            width: double.infinity,
+            color: Colors.amber.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_outlined, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _warning!,
+                    style: TextStyle(
+                      color: Colors.amber.shade900,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Container(
           padding: const EdgeInsets.all(12),
           color: Theme.of(context).colorScheme.primaryContainer,
@@ -412,10 +439,20 @@ class _RarBrowserPageState extends State<RarBrowserPage>
               const Icon(Icons.archive),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  _root!.name,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _root!.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (_rarVersion != null && _rarVersion!.isNotEmpty)
+                      Text(
+                        _rarVersion!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
                 ),
               ),
               Text(
@@ -549,9 +586,7 @@ class _RarBrowserPageState extends State<RarBrowserPage>
             ],
           ),
         ),
-        Expanded(
-          child: _buildContentView(),
-        ),
+        Expanded(child: _buildContentView()),
       ],
     );
   }
@@ -667,8 +702,11 @@ class _RarBrowserPageState extends State<RarBrowserPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(_getFileIcon(_selectedFile!.name),
-              size: 64, color: Colors.grey.shade400),
+          Icon(
+            _getFileIcon(_selectedFile!.name),
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 16),
           Text(
             _selectedFile!.name,
@@ -695,11 +733,42 @@ class _RarBrowserPageState extends State<RarBrowserPage>
 
   bool _isTextExtension(String ext) {
     return [
-      'txt', 'md', 'json', 'xml', 'yaml', 'yml', 'csv',
-      'dart', 'py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'cs',
-      'go', 'rs', 'swift', 'kt', 'rb', 'php', 'sh', 'bash',
-      'html', 'css', 'scss', 'less', 'sql', 'log', 'ini', 'cfg',
-      'properties', 'env', 'gitignore', 'dockerfile',
+      'txt',
+      'md',
+      'json',
+      'xml',
+      'yaml',
+      'yml',
+      'csv',
+      'dart',
+      'py',
+      'js',
+      'ts',
+      'java',
+      'c',
+      'cpp',
+      'h',
+      'cs',
+      'go',
+      'rs',
+      'swift',
+      'kt',
+      'rb',
+      'php',
+      'sh',
+      'bash',
+      'html',
+      'css',
+      'scss',
+      'less',
+      'sql',
+      'log',
+      'ini',
+      'cfg',
+      'properties',
+      'env',
+      'gitignore',
+      'dockerfile',
     ].contains(ext);
   }
 

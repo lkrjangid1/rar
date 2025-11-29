@@ -169,6 +169,8 @@ class RarWeb extends RarPlatform {
         };
       }
 
+      final rarVersion = _detectRarVersion(data);
+
       final jsData = data.toJS;
       final jsPassword = password?.toJS;
 
@@ -183,12 +185,14 @@ class RarWeb extends RarPlatform {
           'success': true,
           'message': result.message,
           'files': files,
+          'rarVersion': rarVersion,
         };
       } else {
         return {
           'success': false,
           'message': result.message,
           'files': <String>[],
+          'rarVersion': rarVersion,
         };
       }
     } catch (e) {
@@ -196,6 +200,7 @@ class RarWeb extends RarPlatform {
         'success': false,
         'message': 'Web listing error: $e',
         'files': <String>[],
+        'rarVersion': null,
       };
     }
   }
@@ -296,6 +301,22 @@ class RarWeb extends RarPlatform {
   /// List all files in the virtual file system.
   static List<String> listVirtualFiles() {
     return _virtualFileSystem.keys.toList();
+  }
+
+  String? _detectRarVersion(Uint8List data) {
+    if (data.length >= 8) {
+      final sig0 = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00];
+      final sig1 = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00];
+      bool matches(List<int> sig) {
+        for (var i = 0; i < sig.length; i++) {
+          if (data[i] != sig[i]) return false;
+        }
+        return true;
+      }
+      if (matches(sig1)) return 'RAR5';
+      if (matches(sig0)) return 'RAR4';
+    }
+    return 'Unknown';
   }
 }
 

@@ -37,15 +37,69 @@
 <body>
   <!-- Preload libarchive as an ES module so import.meta works -->
   <script type="module">
-    import * as libarchive from './assets/packages/rar/libarchive.js';
-    // Expose Archive globally for the plugin loader
+    import * as libarchive from './libarchive.js?v=debug4';
     window.Archive = libarchive.Archive || libarchive.default || libarchive;
-    // Hint the base path for worker/wasm resolution
-    window.RAR_LIB_BASE = './assets/packages/rar/';
+    window.RAR_LIB_BASE = './';
+    console.log('[RAR Web preload] libarchive module loaded', Object.keys(libarchive));
   </script>
 
   <!-- RAR plugin JavaScript - must load before Flutter -->
-  <script src="assets/packages/rar/rar_web.js"></script>
+  <script src="rar_web.js?v=debug4"></script>
+
+  <!-- Lightweight wrapper to log RarWeb calls even if inner file is cached -->
+  <script>
+    (function() {
+      const prefix = '[RAR Web wrapper]';
+      const original = window.RarWeb;
+      if (!original) {
+        console.warn(prefix, 'window.RarWeb missing; wrapper not applied');
+        return;
+      }
+
+      const wrapCall = (name) => async (...args) => {
+        try {
+          const summary = args.map((a) => {
+            if (a instanceof Uint8Array) return `Uint8Array(${a.byteLength})`;
+            if (a && typeof a === 'object') return JSON.stringify(a);
+            return String(a);
+          });
+          console.log(prefix, name, 'args:', summary);
+          const result = await original[name](...args);
+          const arch = window.__rarLastArchive;
+          if (arch) {
+            const entries = arch.entries;
+            console.log(prefix, name, 'archive snapshot:', {
+              ctor: arch.constructor && arch.constructor.name,
+              keys: Object.keys(arch),
+              entriesType: typeof entries,
+              entriesIsArray: Array.isArray(entries),
+              entriesHasIterator: entries && typeof entries[Symbol.iterator] === 'function',
+              entriesLength: entries && typeof entries.length === 'number' ? entries.length : undefined,
+              listFilesFn: typeof arch.listFiles,
+              getFilesArrayFn: typeof arch.getFilesArray,
+              extractFilesFn: typeof arch.extractFiles
+            });
+          }
+          console.log(prefix, name, 'result:', result);
+          return result;
+        } catch (e) {
+          console.error(prefix, name, 'error:', e);
+          throw e;
+        }
+      };
+
+      window.RarWeb = {
+        get isInitialized() {
+          return original.isInitialized;
+        },
+        init: wrapCall('init'),
+        listFromBytes: wrapCall('listFromBytes'),
+        extractFromBytes: wrapCall('extractFromBytes'),
+      };
+
+      console.log(prefix, 'wrapper installed');
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 
