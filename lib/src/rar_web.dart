@@ -14,7 +14,10 @@
 
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
+
+import 'package:web/web.dart' as web;
 
 import '../rar_platform_interface.dart';
 
@@ -83,6 +86,11 @@ class RarWeb extends RarPlatform {
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
 
+    // Check if RarWeb is already loaded
+    if (!_isRarWebLoaded) {
+      await _injectRarWebScript();
+    }
+
     try {
       final result = await RarWebJS.init().toDart;
       _initialized = result.toDart;
@@ -92,6 +100,31 @@ class RarWeb extends RarPlatform {
     } catch (e) {
       throw Exception('Error initializing RAR WASM library: $e');
     }
+  }
+
+  bool get _isRarWebLoaded {
+    return web.window.has('RarWeb');
+  }
+
+  Future<void> _injectRarWebScript() async {
+    final completer = Completer<void>();
+    final script =
+        web.document.createElement('script') as web.HTMLScriptElement;
+    // Try to load from the package assets
+    // Note: In debug builds, this might need adjustment depending on how assets are served
+    script.src = 'assets/packages/rar/web/rar_web.js';
+    script.type = 'text/javascript';
+
+    script.onload = (web.Event e) {
+      completer.complete();
+    }.toJS;
+
+    script.onerror = (web.Event e) {
+      completer.completeError(Exception('Failed to load rar_web.js'));
+    }.toJS;
+
+    web.document.head?.appendChild(script);
+    await completer.future;
   }
 
   @override
@@ -133,21 +166,12 @@ class RarWeb extends RarPlatform {
             'message': 'Extraction completed successfully ($fileCount files)',
           };
         }
-        return {
-          'success': true,
-          'message': result.message,
-        };
+        return {'success': true, 'message': result.message};
       } else {
-        return {
-          'success': false,
-          'message': result.message,
-        };
+        return {'success': false, 'message': result.message};
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Web extraction error: $e',
-      };
+      return {'success': false, 'message': 'Web extraction error: $e'};
     }
   }
 
@@ -214,7 +238,8 @@ class RarWeb extends RarPlatform {
   }) async {
     return {
       'success': false,
-      'message': 'RAR creation is not supported on web. Consider using ZIP format instead.',
+      'message':
+          'RAR creation is not supported on web. Consider using ZIP format instead.',
     };
   }
 
@@ -229,7 +254,9 @@ class RarWeb extends RarPlatform {
       }
 
       // Try to fetch from URL if it looks like a URL
-      if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
+      if (path.startsWith('http://') ||
+          path.startsWith('https://') ||
+          path.startsWith('blob:')) {
         return await _fetchFromUrl(path);
       }
 
@@ -259,7 +286,10 @@ class RarWeb extends RarPlatform {
   }
 
   /// Store extracted files in web storage or virtual file system.
-  Future<void> _storeExtractedFiles(String basePath, JSArray<RarFileEntry> entries) async {
+  Future<void> _storeExtractedFiles(
+    String basePath,
+    JSArray<RarFileEntry> entries,
+  ) async {
     final entriesList = entries.toDart;
     for (var i = 0; i < entriesList.length; i++) {
       final entry = entriesList[i];
@@ -277,7 +307,9 @@ class RarWeb extends RarPlatform {
   /// Register a custom file loader for web platform.
   /// This allows the application to provide file data from various sources
   /// (File picker, drag-and-drop, etc.).
-  static void registerFileLoader(Future<Uint8List?> Function(String path) loader) {
+  static void registerFileLoader(
+    Future<Uint8List?> Function(String path) loader,
+  ) {
     _fileLoader = loader;
   }
 
@@ -313,6 +345,7 @@ class RarWeb extends RarPlatform {
         }
         return true;
       }
+
       if (matches(sig1)) return 'RAR5';
       if (matches(sig0)) return 'RAR4';
     }
