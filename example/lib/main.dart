@@ -7,16 +7,10 @@
 // - File tree with expandable folders
 // - Content viewer for text and images
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:rar/rar.dart';
 
 import 'file_browser.dart';
-import 'platform_stub.dart'
-    if (dart.library.io) 'platform_io.dart'
-    if (dart.library.html) 'platform_web.dart';
+import 'services/archive_service.dart';
 
 void main() {
   runApp(const RarBrowserApp());
@@ -50,6 +44,7 @@ class RarBrowserPage extends StatefulWidget {
 }
 
 class _RarBrowserPageState extends State<RarBrowserPage> {
+  final _archiveService = ArchiveService();
   FileNode? _root;
   bool _isLoading = false;
   String? _error;
@@ -62,7 +57,7 @@ class _RarBrowserPageState extends State<RarBrowserPage> {
   @override
   void initState() {
     super.initState();
-    requestPlatformPermissions();
+    _archiveService.requestPermissions();
   }
 
   @override
@@ -78,116 +73,33 @@ class _RarBrowserPageState extends State<RarBrowserPage> {
       _rarVersion = null;
     });
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['rar', 'cbr'],
-      withData: kIsWeb,
+    final result = await _archiveService.pickAndOpenArchive(
+      password: _password,
     );
 
-    if (result == null || result.files.isEmpty) {
+    if (result == null) {
       setState(() => _isLoading = false);
       return;
     }
 
-    final file = result.files.single;
-    String? filePath = file.path;
-
-    if (kIsWeb) {
-      if (file.bytes == null) {
-        setState(() {
-          _error = 'Could not read file data';
-          _isLoading = false;
-        });
-        return;
-      }
-      storeWebFileData(file.name, file.bytes!);
-      filePath = file.name;
-    }
-
-    if (filePath == null) {
+    if (!result.isSuccess) {
       setState(() {
-        _error = 'Invalid file path';
+        _error = result.errorMessage ?? 'Failed to open archive';
         _isLoading = false;
       });
       return;
-    }
-
-    _archiveName = file.name;
-
-    // Get extraction path
-    String extractPath;
-    if (kIsWeb) {
-      extractPath = '/extracted';
-    } else {
-      final directory = await getApplicationDocumentsDirectory();
-      extractPath = '${directory.path}/rar_extracted';
-      await createDirectory(extractPath);
-    }
-    _extractPath = extractPath;
-
-    // Extract the archive to access file contents
-    final extractResult = await Rar.extractRarFile(
-      rarFilePath: filePath,
-      destinationPath: extractPath,
-      password: _password,
-    );
-
-    if (extractResult['success'] != true) {
-      // Try listing contents instead (in case extraction failed but listing works)
-      final listResult = await Rar.listRarContents(
-        rarFilePath: filePath,
-        password: _password,
-      );
-
-      if (listResult['success'] == true) {
-        final files = List<String>.from(listResult['files'] as List);
-        setState(() {
-          _root = FileNode.buildTree(files, rootName: file.name);
-          _extractPath = null; // Can't load content without extraction
-          _isLoading = false;
-          _warning = extractResult['message']?.toString();
-          _rarVersion = listResult['rarVersion'] as String?;
-        });
-        return;
-      }
-
-      setState(() {
-        _error = extractResult['message'] ?? 'Failed to open archive';
-        _isLoading = false;
-      });
-      return;
-    }
-
-    // List the extracted files
-    final files = await listDirectoryContents(extractPath);
-
-    // Also get the archive structure from the RAR itself for better tree
-    final listResult = await Rar.listRarContents(
-      rarFilePath: filePath,
-      password: _password,
-    );
-
-    List<String> archiveFiles;
-    if (listResult['success'] == true) {
-      archiveFiles = List<String>.from(listResult['files'] as List);
-      _rarVersion = listResult['rarVersion'] as String?;
-      if (archiveFiles.isEmpty && extractResult['success'] != true) {
-        _warning =
-            extractResult['message']?.toString() ??
-            listResult['message']?.toString() ??
-            'No files were listed from the archive.';
-      }
-    } else {
-      archiveFiles = files;
     }
 
     setState(() {
-      _root = FileNode.buildTree(archiveFiles, rootName: file.name);
+      _root = FileNode.buildTree(
+        result.files,
+        rootName: result.archiveName ?? 'Archive',
+      );
+      _archiveName = result.archiveName;
+      _extractPath = result.extractPath;
+      _rarVersion = result.rarVersion;
+      _warning = result.errorMessage; // Warning message if any
       _isLoading = false;
-      _rarVersion = _rarVersion ?? listResult['rarVersion'] as String?;
-      if (listResult['success'] != true) {
-        _warning = _warning ?? listResult['message']?.toString();
-      }
     });
   }
 
@@ -299,7 +211,7 @@ class _RarBrowserPageState extends State<RarBrowserPage> {
       onLoadContent: (path) async {
         if (_extractPath == null) return null;
         final fullPath = '$_extractPath/$path';
-        return loadFileContent(fullPath);
+        return _archiveService.loadContent(fullPath);
       },
     );
   }

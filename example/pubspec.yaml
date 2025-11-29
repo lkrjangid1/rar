@@ -17,6 +17,7 @@ dependencies:
 
   rar:
     path: ../
+  plugin_platform_interface: ^2.1.8
 
 dev_dependencies:
   integration_test:
