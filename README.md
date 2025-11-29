@@ -299,14 +299,10 @@ This plugin follows the federated plugin architecture:
 lib/
   rar.dart                    # Main entry point
   rar_platform_interface.dart # Abstract platform interface
-  rar_platform_exports.dart   # Platform exports
   src/
-    rar_method_channel.dart   # Mobile implementation
-    rar_desktop_ffi.dart      # Desktop FFI bindings
-    rar_linux.dart            # Linux platform
-    rar_macos.dart            # macOS platform
-    rar_windows.dart          # Windows platform
-    rar_web.dart              # Web platform
+    rar_method_channel.dart   # Mobile implementation (iOS/macOS)
+    rar_ffi.dart              # FFI implementation (Android)
+    rar_web.dart              # Web implementation
 ```
 
 ## Testing
