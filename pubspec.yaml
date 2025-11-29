@@ -32,6 +32,10 @@ flutter:
         pluginClass: RarPlugin
       ios:
         pluginClass: RarPlugin
+      # linux:
+      #   pluginClass: RarPlugin
+      # windows:
+      #   pluginClass: RarPluginCApi
       # macOS uses UnrarKit via method channels (like iOS)
       macos:
         pluginClass: RarPlugin
