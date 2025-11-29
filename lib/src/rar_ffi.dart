@@ -238,4 +238,17 @@ class RarFfi extends RarPlatform {
     }
     return 'Unknown';
   }
+
+  @override
+  Future<Map<String, dynamic>> createRarArchive({
+    required String outputPath,
+    required List<String> sourcePaths,
+    String? password,
+    int compressionLevel = 5,
+  }) async {
+    return {
+      'success': false,
+      'message': 'RAR creation is not supported on this platform',
+    };
+  }
 }

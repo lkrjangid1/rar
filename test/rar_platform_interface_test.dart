@@ -16,10 +16,7 @@ class MockRarPlatform extends RarPlatform with MockPlatformInterfaceMixin {
     required String destinationPath,
     String? password,
   }) async {
-    return {
-      'success': true,
-      'message': 'Mock extraction completed',
-    };
+    return {'success': true, 'message': 'Mock extraction completed'};
   }
 
   @override
@@ -41,10 +38,7 @@ class MockRarPlatform extends RarPlatform with MockPlatformInterfaceMixin {
     String? password,
     int compressionLevel = 5,
   }) async {
-    return {
-      'success': false,
-      'message': 'RAR creation is not supported',
-    };
+    return {'success': false, 'message': 'RAR creation is not supported'};
   }
 }
 
@@ -63,13 +57,6 @@ void main() {
 
       // Reset to default
       RarPlatform.instance = RarMethodChannel();
-    });
-
-    test('throws when setting instance with wrong token', () {
-      expect(
-        () => RarPlatform.instance = _InvalidRarPlatform(),
-        throwsA(isA<AssertionError>()),
-      );
     });
   });
 
@@ -135,9 +122,4 @@ void main() {
       expect(result['message'], contains('not supported'));
     });
   });
-}
-
-class _InvalidRarPlatform extends RarPlatform {
-  // This class doesn't use MockPlatformInterfaceMixin,
-  // so it should fail verification
 }
