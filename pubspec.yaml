@@ -2,14 +2,14 @@ name: rar
 description: >
   A Flutter plugin for handling RAR files. Extract and list contents of RAR archives
   on Android, iOS, macOS, and Web platforms.
-version: 0.2.1
+version: 0.3.0
 homepage: https://github.com/lkrjangid1/rar
 repository: https://github.com/lkrjangid1/rar
 issue_tracker: https://github.com/lkrjangid1/rar/issues
 
 environment:
-  sdk: ^3.10.0
-  flutter: '>=3.38.0'
+  sdk: '>=3.4.4 <4.0.0'
+  flutter: '>=3.3.0'
 
 dependencies:
   ffi: ^2.1.4
@@ -21,7 +21,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^5.0.0
 
 flutter:
   plugin:
