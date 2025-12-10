@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "example",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "cwd": "example"
+        },
+        {
+            "name": "example (web)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "chrome",
+            "program": "lib/main.dart",
+            "cwd": "example"
+        },
+        {
+            "name": "example (macos)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "macos",
+            "program": "lib/main.dart",
+            "cwd": "example"
+        }
+    ]
+}
