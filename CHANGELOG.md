@@ -1,8 +1,8 @@
-## 0.3.0
+## 0.3.0 [@csells](https://github.com/csells)
 
 - Added support for macOS and the web
 
-## 0.2.1
+## 0.2.1 [@csells](https://github.com/csells)
 
 ### Testing
 * Added unit tests for platform interface (`test/rar_platform_interface_test.dart`)
@@ -20,7 +20,7 @@
 * Updated documentation with FFI best practices
 * Updated README with plugin architecture documentation
 
-## 0.2.0
+## 0.2.0 [@csells](https://github.com/csells)
 
 Major release adding full desktop and web support:
 
