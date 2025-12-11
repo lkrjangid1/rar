@@ -365,6 +365,10 @@ flutter run -d macos    # or chrome, etc.
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## Contributors
+- Lokesh jangid [lkrjangid1](https://github.com/lkrjangid1)
+- Chris Sells [csells](https://github.com/csells)
+
 ## Issues
 
 If you find a bug or want to request a new feature, please open an issue on
